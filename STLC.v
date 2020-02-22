@@ -82,3 +82,51 @@ Lemma app_red : app_id --> Val (Lit 1).
   unfold app_id.
   apply red_beta.
 Qed.
+
+Inductive isValue : Term -> Prop :=
+| valisval : forall v, isValue (Val v).
+
+Lemma emptyEnvHasNoVars1 : forall x T, Tcontains ∅ x T -> False.
+  intros.
+  inversion H.
+Qed.
+Lemma emptyEnvHasNoVars2 : forall x T, ∅ ⊢ Var x : T -> False.
+  intros.
+  inversion H.
+  apply emptyEnvHasNoVars1 in H2.
+  contradiction.
+Qed.
+Lemma litIsNotFun : forall T1 T2 n, ∅ ⊢ Val (Lit n) : TLam T1 T2 -> False.
+  intros.
+  inversion H.
+Qed.
+
+Theorem Progress : forall t T, ∅ ⊢ t : T -> isValue t \/ exists t', t --> t'.
+  induction t.
+  intros.
+  * left. apply valisval.
+  *
+    intros.
+    apply emptyEnvHasNoVars2 in H.
+    contradiction.
+  * right.
+    inversion H.
+    remember H3 as t1isLambda. clear Heqt1isLambda.
+    apply IHt1 in H3.
+    destruct H3.
+    **
+      inversion H3.
+      destruct v.
+      ***
+        assert (∅ ⊢ Val (Lit n) : TLam argT T).
+        **** rewrite -> H6. assumption.
+        **** apply litIsNotFun in H7.
+             contradiction.
+      ***
+        exists (substitute t0 l t2).
+        apply red_beta.
+    **
+      inversion H3.
+      exists (App x t2).
+      apply red_app1. assumption.
+Qed.
