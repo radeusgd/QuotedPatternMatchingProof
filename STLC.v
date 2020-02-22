@@ -52,7 +52,7 @@ Fixpoint substitute (term: Term) (varname: label) (varterm: Term) : Term :=
   | Val (Lit n) => term
   | Val (Lam x T t) =>
     if Nat.eq_dec x varname then term
-    else term (* TODO *)
+    else Val (Lam x T (substitute t varname varterm))
   | Var x =>
     if Nat.eq_dec x varname then varterm
     else term
@@ -130,3 +130,37 @@ Theorem Progress : forall t T, ∅ ⊢ t : T -> isValue t \/ exists t', t --> t'
       exists (App x t2).
       apply red_app1. assumption.
 Qed.
+
+Lemma CanonicalForm1 : forall G v, G ⊢ (Val v) : TNat -> exists n, v = Lit n.
+  intros.
+  inversion H.
+  exists n.
+  trivial.
+Qed.
+Lemma CanonicalForm2 : forall G v T1 T2, G ⊢ (Val v) : TLam T1 T2 -> exists x t, v = Lam x T1 t.
+  intros.
+  inversion H.
+  exists arg. exists body.
+  trivial.
+Qed.
+
+Lemma Substitution : forall G t1 T1 x t2 T2, G ⊢ t1 : T1 /\ G ; x : T1 ⊢ t2 : T2 -> G ⊢ substitute t2 x t1 : T2.
+  induction t2; intros; inversion H.
+(*
+  * simpl.
+  intros.
+  inversion H.
+*)
+Admitted.
+
+Theorem Preservation : forall G t T t', G ⊢ t : T /\ t --> t' -> G ⊢ t' : T.
+  induction t; intros; inversion H.
+  * inversion H1.
+  * inversion H1.
+  * inversion H1.
+    **
+      eapply Substitution.
+      admit.
+    ** admit.
+    ** admit.
+Admitted.
