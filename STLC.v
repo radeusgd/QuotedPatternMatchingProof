@@ -131,6 +131,39 @@ Theorem Progress : forall t T, ∅ ⊢ t : T -> isValue t \/ exists t', t --> t'
       apply red_app1. assumption.
 Qed.
 
+Inductive is_free_in : label -> Term -> Prop :=
+| fv_var : forall x, is_free_in x (Var x)
+| fv_app1 : forall x t1 t2, is_free_in x t1 -> is_free_in x (App t1 t2)
+| fv_app2 : forall x t1 t2, is_free_in x t2 -> is_free_in x (App t1 t2)
+| fv_lam : forall x y t T, is_free_in x t -> x <> y -> is_free_in x (Val (Lam y T t))
+.
+
+Definition closed (t: Term): Prop := forall x, not (is_free_in x t).
+
+(* Lemma free_in_context : forall G x t T, *)
+(*     is_free_in x t -> G ⊢ t : T -> exists T', Tcontains G x T'. *)
+(*   intros. *)
+(*   induction t. *)
+
+(* Admitted. *)
+
+(* Corollary typableInEmptyIsClosed : forall t T, ∅ ⊢ t : T -> closed t. *)
+(*   intros. *)
+(*   unfold closed. *)
+(*   intros. intro. *)
+(*   assert (exists T', Tcontains ∅ x T'). *)
+(*   * apply free_in_context with t T; auto. *)
+(*   * inversion H1. *)
+(*     rename x0 into T'. *)
+(*     inversion H2. *)
+(* Qed. *)
+
+Lemma Weakening : forall G G' t T,
+    G ⊢ t : T -> (forall x T', is_free_in x t -> Tcontains G x T' <-> Tcontains G' x T') -> G' ⊢ t : T.
+  intros.
+
+Admitted.
+
 Lemma CanonicalForm1 : forall G v, G ⊢ (Val v) : TNat -> exists n, v = Lit n.
   intros.
   inversion H.
@@ -146,6 +179,7 @@ Qed.
 
 Lemma Substitution : forall G t1 T1 x t2 T2, G ⊢ t1 : T1 /\ G ; x : T1 ⊢ t2 : T2 -> G ⊢ substitute t2 x t1 : T2.
   induction t2; intros; inversion H.
+  * 
 (*
   * simpl.
   intros.
@@ -153,14 +187,31 @@ Lemma Substitution : forall G t1 T1 x t2 T2, G ⊢ t1 : T1 /\ G ; x : T1 ⊢ t2 
 *)
 Admitted.
 
+Lemma AppIsApp : forall G t1 t2 T, G ⊢ App t1 t2 : T -> exists T', (G ⊢ t1 : TLam T' T) /\ (G ⊢ t2 : T').
+  intros.
+  inversion H.
+  exists argT.
+  auto.
+Qed.
+
 Theorem Preservation : forall G t T t', G ⊢ t : T /\ t --> t' -> G ⊢ t' : T.
-  induction t; intros; inversion H.
-  * inversion H1.
-  * inversion H1.
-  * inversion H1.
-    **
-      eapply Substitution.
-      admit.
-    ** admit.
-    ** admit.
-Admitted.
+  induction t; intros; inversion H; inversion H1.
+  * apply Substitution with argT.
+    assert (Ht : G ⊢ App (Val (Lam argname argT body)) t2 : T).
+    rewrite H3. auto.
+    intuition.
+    ** inversion Ht.
+       assert (argT0 = argT).
+       *** inversion H9. trivial.
+       *** rewrite <- H12. trivial.
+    ** inversion Ht.
+       inversion H9. trivial.
+  * inversion H0.
+    apply ty_app with argT.
+    ** apply IHt1. intuition.
+    ** trivial.
+  * inversion H0.
+    apply ty_app with argT.
+    ** trivial.
+    ** apply IHt2. intuition.
+Qed.
