@@ -43,21 +43,82 @@ Inductive term_typing : TypCtx -> Term -> TType -> Prop :=
 | ty_app : forall G f arg argT retT, G ⊢ f : (TLam argT retT) -> G ⊢ arg : argT -> G ⊢ (App f arg) : retT
 where "G '⊢' t ':' T" := (term_typing G t T).
 
-(*
-There are no free variables in well-typed terms (all should be bound to some λ), so we don't have to worry about avoiding capture.
-(TODO is that correct?)
-*)
-Fixpoint substitute (term: Term) (varname: label) (varterm: Term) : Term :=
+Inductive is_free_in : label -> Term -> Prop :=
+| fv_var : forall x, is_free_in x (Var x)
+| fv_app1 : forall x t1 t2, is_free_in x t1 -> is_free_in x (App t1 t2)
+| fv_app2 : forall x t1 t2, is_free_in x t2 -> is_free_in x (App t1 t2)
+| fv_lam : forall x y t T, is_free_in x t -> x <> y -> is_free_in x (Val (Lam y T t))
+.
+
+Definition closed (t: Term): Prop := forall x, not (is_free_in x t).
+
+Inductive is_present_in : label -> Term -> Prop :=
+| isi_var : forall x, is_present_in x (Var x)
+| isi_lam_arg : forall x T b, is_present_in x (Val (Lam x T b))
+| isi_lam_body : forall y x T b, is_present_in y b -> is_present_in y (Val (Lam x T b))
+| isi_app1 : forall x t1 t2, is_present_in x t1 -> is_present_in x (App t1 t2)
+| isi_app2 : forall x t1 t2, is_present_in x t2 -> is_present_in x (App t1 t2)
+.
+
+Fixpoint fresh (term: Term) : label :=
+  match term with
+  | Val (Lit n) => 0
+  | Val (Lam x T t) => max x (fresh t + 1)
+  | Var x => x + 1
+  | App t1 t2 => max (fresh t1) (fresh t2)
+  end.
+
+Lemma freshReturnsGreaterThanAll : forall t x, is_present_in x t -> fresh t > x.
+  induction t; intros.
+  * destruct v.
+    ** exfalso.
+       inversion H.
+    **
+Admitted.
+
+Definition fresh2 (t1: Term) (t2: Term) := (max (fresh t1) (fresh t2)) + 1.
+
+Fixpoint renameVars (term: Term) (old: label) (new: label): Term :=
+  match term with
+  | Val (Lit n) => term
+  | Val (Lam x T t) =>
+    if Nat.eq_dec x old then Val (Lam new T (renameVars t old new))
+    else Val (Lam x T (renameVars t old new))
+  | Var x =>
+    if Nat.eq_dec x old then Var new
+    else term
+  | App t1 t2 => App (renameVars t1 old new) (renameVars t2 old new)
+end.
+
+Fixpoint termSize (term: Term) : nat :=
+  match term with
+  | Val (Lit n) => 1
+  | Val (Lam x T t) => 1 + termSize t
+  | Var x => 1
+  | App t1 t2 => 1 + (termSize t1) + (termSize t2)
+  end.
+
+Require Coq.Program.Wf.
+Program Fixpoint substitute (term: Term) (varname: label) (varterm: Term) {measure 0 termSize} : Term :=
   match term with
   | Val (Lit n) => term
   | Val (Lam x T t) =>
     if Nat.eq_dec x varname then term
-    else Val (Lam x T (substitute t varname varterm))
+    else
+      let freshx := fresh2 varterm t in
+      let t' := renameVars t x freshx in
+      Val (Lam freshx T (substitute t' varname varterm))
   | Var x =>
     if Nat.eq_dec x varname then varterm
     else term
   | App t1 t2 => App (substitute t1 varname varterm) (substitute t2 varname varterm)
   end.
+Next Obligation.
+  Admitted.
+Next Obligation.
+  Admitted.
+Next Obligation.
+  Admitted.
 
 Reserved Notation "t1 '-->' t2" (at level 40).
 Inductive reduces : Term -> Term -> Prop :=
@@ -131,15 +192,6 @@ Theorem Progress : forall t T, ∅ ⊢ t : T -> isValue t \/ exists t', t --> t'
       apply red_app1. assumption.
 Qed.
 
-Inductive is_free_in : label -> Term -> Prop :=
-| fv_var : forall x, is_free_in x (Var x)
-| fv_app1 : forall x t1 t2, is_free_in x t1 -> is_free_in x (App t1 t2)
-| fv_app2 : forall x t1 t2, is_free_in x t2 -> is_free_in x (App t1 t2)
-| fv_lam : forall x y t T, is_free_in x t -> x <> y -> is_free_in x (Val (Lam y T t))
-.
-
-Definition closed (t: Term): Prop := forall x, not (is_free_in x t).
-
 (* Lemma free_in_context : forall G x t T, *)
 (*     is_free_in x t -> G ⊢ t : T -> exists T', Tcontains G x T'. *)
 (*   intros. *)
@@ -177,7 +229,7 @@ Lemma CanonicalForm2 : forall G v T1 T2, G ⊢ (Val v) : TLam T1 T2 -> exists x 
   trivial.
 Qed.
 
-Lemma Substitution : forall G t1 T1 x t2 T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t2 : T2 -> G ⊢ substitute t2 x t1 : T2.
+Lemma Substitution : forall G t1 T1 x t2 T2, G ⊢ t1 : T1 /\ G ; x : T1 ⊢ t2 : T2 -> G ⊢ substitute t2 x t1 : T2.
   induction t2; intros; inversion H.
   * 
 (*
@@ -194,10 +246,10 @@ Lemma AppIsApp : forall G t1 t2 T, G ⊢ App t1 t2 : T -> exists T', (G ⊢ t1 :
   auto.
 Qed.
 
-Theorem Preservation : forall t T t', ∅ ⊢ t : T /\ t --> t' -> ∅ ⊢ t' : T.
+Theorem Preservation : forall G t T t', G ⊢ t : T /\ t --> t' -> G ⊢ t' : T.
   induction t; intros; inversion H; inversion H1.
   * apply Substitution with argT.
-    assert (Ht : ∅ ⊢ App (Val (Lam argname argT body)) t2 : T).
+    assert (Ht : G ⊢ App (Val (Lam argname argT body)) t2 : T).
     rewrite H3. auto.
     intuition.
     ** inversion Ht.
