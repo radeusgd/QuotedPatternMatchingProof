@@ -2,6 +2,7 @@ Require Import String.
 Require Import Coq.FSets.FMapList.
 Require Import Coq.Structures.OrderedTypeEx.
 Require Import Omega.
+Require Coq.Arith.EqNat.
 
 Definition label := nat.
 
@@ -16,6 +17,12 @@ Inductive Term :=
 with Value :=
 | Lit : nat -> Value
 | Lam : label -> TType -> Term -> Value.
+
+Scheme term_ind := Induction for Term Sort Prop
+  with value_ind := Induction for Value Sort Prop.
+Check term_ind.
+Combined Scheme term_rec2 from term_ind, value_ind.
+Check term_rec2.
 
 Inductive TypCtx :=
 | Tempty : TypCtx
@@ -140,23 +147,23 @@ Inductive is_free_in : label -> Term -> Prop :=
 
 Definition closed (t: Term): Prop := forall x, not (is_free_in x t).
 
-(* Lemma free_in_context : forall G x t T, *)
-(*     is_free_in x t -> G ⊢ t : T -> exists T', Tcontains G x T'. *)
-(*   intros. *)
-(*   induction t. *)
+Lemma free_in_context : forall G x t T,
+    is_free_in x t -> G ⊢ t : T -> exists T', Tcontains G x T'.
+  intros.
+  induction t.
 
-(* Admitted. *)
+Admitted.
 
-(* Corollary typableInEmptyIsClosed : forall t T, ∅ ⊢ t : T -> closed t. *)
-(*   intros. *)
-(*   unfold closed. *)
-(*   intros. intro. *)
-(*   assert (exists T', Tcontains ∅ x T'). *)
-(*   * apply free_in_context with t T; auto. *)
-(*   * inversion H1. *)
-(*     rename x0 into T'. *)
-(*     inversion H2. *)
-(* Qed. *)
+Corollary typableInEmptyIsClosed : forall t T, ∅ ⊢ t : T -> closed t.
+  intros.
+  unfold closed.
+  intros. intro.
+  assert (exists T', Tcontains ∅ x T').
+  * apply free_in_context with t T; auto.
+  * inversion H1.
+    rename x0 into T'.
+    inversion H2.
+Qed.
 
 Lemma CanonicalForm1 : forall G v, G ⊢ (Val v) : TNat -> exists n, v = Lit n.
   intros.
@@ -171,15 +178,15 @@ Lemma CanonicalForm2 : forall G v T1 T2, G ⊢ (Val v) : TLam T1 T2 -> exists x 
   trivial.
 Qed.
 
-(* Lemma Weakening : forall G G' t T, *)
-(*     G ⊢ t : T -> (forall x T', is_free_in x t -> Tcontains G x T' <-> Tcontains G' x T') -> G' ⊢ t : T. *)
-(*   intros. *)
+Lemma Weakening : forall G G' t T,
+    G ⊢ t : T -> (forall x T', is_free_in x t -> Tcontains G x T' <-> Tcontains G' x T') -> G' ⊢ t : T.
+  intros.
 
-(* Admitted. *)
-(* Lemma SimpleWeakening : forall G t T x T',  *)
+Admitted.
+(* Lemma SimpleWeakening : forall G t T x T', *)
 
 Lemma Substitution : forall G t1 T1 x t2 T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t2 : T2 -> G ⊢ substitute t2 x t1 : T2.
-  induction t2; intros; inversion H.
+  induction t2. intros; inversion H.
   * destruct v.
     ** simpl.
        inversion H1.
@@ -187,13 +194,51 @@ Lemma Substitution : forall G t1 T1 x t2 T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t
     ** simpl.
        remember (l =? x) as Heq.
        destruct Heq.
-       *** admit.
-       *** admit.
+       *** assert (l=x).
+           apply beq_nat_true; intuition.
+           apply Weakening with (G; x : T1).
+           trivial.
+           intros.
+           assert (x0 <> x).
+           intro. rewrite H4 in H3.
+           inversion H3. apply H10. auto.
+           intuition.
+           **** inversion H.
+                exfalso. apply H4. auto.
+                trivial.
+           **** apply tcontains_cons. trivial. auto.
+       *** assert (l<>x).
+           apply beq_nat_false; intuition.
+           
+
   * simpl.
     remember (l =? x) as Heq.
     destruct Heq.
-    ** admit.
-    ** admit.
+    ** assert (l = x).
+       apply beq_nat_true; intuition.
+       assert ((G; x : T1) ⊢ Var x : T2).
+       ***
+         rewrite <- H2.
+         rewrite <- H2 in H1. trivial.
+       *** assert (T1 = T2).
+           **** inversion H3. inversion H6. trivial.
+                intuition.
+           **** rewrite <- H4.
+                eapply Weakening. exact H0.
+                intros.
+                exfalso.
+                assert (closed t1).
+                ***** eapply typableInEmptyIsClosed. exact H0.
+                ***** unfold closed in H6. apply H6 with x0. trivial.
+    ** assert (l <> x).
+       apply beq_nat_false. intuition.
+       apply Weakening with (G; x : T1).
+       trivial.
+       intros.
+       inversion H3.
+       intuition.
+       *** inversion H. exfalso. intuition. trivial.
+       *** apply tcontains_cons; intuition.
   * simpl.
     inversion H1.
     apply ty_app with argT.
