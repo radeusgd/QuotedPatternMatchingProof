@@ -51,10 +51,10 @@ Fixpoint substitute (term: Term) (varname: label) (varterm: Term) : Term :=
   match term with
   | Val (Lit n) => term
   | Val (Lam x T t) =>
-    if Nat.eq_dec x varname then term
+    if Nat.eqb x varname then term
     else Val (Lam x T (substitute t varname varterm))
   | Var x =>
-    if Nat.eq_dec x varname then varterm
+    if Nat.eqb x varname then varterm
     else term
   | App t1 t2 => App (substitute t1 varname varterm) (substitute t2 varname varterm)
   end.
@@ -158,12 +158,6 @@ Definition closed (t: Term): Prop := forall x, not (is_free_in x t).
 (*     inversion H2. *)
 (* Qed. *)
 
-Lemma Weakening : forall G G' t T,
-    G ⊢ t : T -> (forall x T', is_free_in x t -> Tcontains G x T' <-> Tcontains G' x T') -> G' ⊢ t : T.
-  intros.
-
-Admitted.
-
 Lemma CanonicalForm1 : forall G v, G ⊢ (Val v) : TNat -> exists n, v = Lit n.
   intros.
   inversion H.
@@ -177,14 +171,36 @@ Lemma CanonicalForm2 : forall G v T1 T2, G ⊢ (Val v) : TLam T1 T2 -> exists x 
   trivial.
 Qed.
 
+(* Lemma Weakening : forall G G' t T, *)
+(*     G ⊢ t : T -> (forall x T', is_free_in x t -> Tcontains G x T' <-> Tcontains G' x T') -> G' ⊢ t : T. *)
+(*   intros. *)
+
+(* Admitted. *)
+(* Lemma SimpleWeakening : forall G t T x T',  *)
+
 Lemma Substitution : forall G t1 T1 x t2 T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t2 : T2 -> G ⊢ substitute t2 x t1 : T2.
   induction t2; intros; inversion H.
-  * 
-(*
+  * destruct v.
+    ** simpl.
+       inversion H1.
+       apply ty_lit.
+    ** simpl.
+       remember (l =? x) as Heq.
+       destruct Heq.
+       *** admit.
+       *** admit.
   * simpl.
-  intros.
-  inversion H.
-*)
+    remember (l =? x) as Heq.
+    destruct Heq.
+    ** admit.
+    ** admit.
+  * simpl.
+    inversion H1.
+    apply ty_app with argT.
+    ** apply IHt2_1.
+       intuition.
+    ** apply IHt2_2.
+       intuition.
 Admitted.
 
 Lemma AppIsApp : forall G t1 t2 T, G ⊢ App t1 t2 : T -> exists T', (G ⊢ t1 : TLam T' T) /\ (G ⊢ t2 : T').
