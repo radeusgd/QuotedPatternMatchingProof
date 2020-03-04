@@ -11,18 +11,11 @@ Inductive TType :=
 | TLam : TType -> TType -> TType.
 
 Inductive Term :=
-| Val : Value -> Term
+| Lit : nat -> Term
+| Lam : label -> TType -> Term -> Term
 | Var : label -> Term
 | App : Term -> Term -> Term
-with Value :=
-| Lit : nat -> Value
-| Lam : label -> TType -> Term -> Value.
-
-Scheme term_ind := Induction for Term Sort Prop
-  with value_ind := Induction for Value Sort Prop.
-Check term_ind.
-Combined Scheme term_rec2 from term_ind, value_ind.
-Check term_rec2.
+.
 
 Inductive TypCtx :=
 | Tempty : TypCtx
@@ -44,9 +37,9 @@ Qed.
 
 Reserved Notation "G '⊢' t ':' T" (at level 40, t at level 59).
 Inductive term_typing : TypCtx -> Term -> TType -> Prop :=
-| ty_lit : forall G n, G ⊢ (Val (Lit n)) : TNat
+| ty_lit : forall G n, G ⊢ (Lit n) : TNat
 | ty_var : forall G x t, Tcontains G x t -> G ⊢ Var x : t
-| ty_lam : forall G arg argT body bodyT, (G; arg : argT) ⊢ body : bodyT -> G ⊢ (Val (Lam arg argT body)) : (TLam argT bodyT)
+| ty_lam : forall G arg argT body bodyT, (G; arg : argT) ⊢ body : bodyT -> G ⊢ (Lam arg argT body) : (TLam argT bodyT)
 | ty_app : forall G f arg argT retT, G ⊢ f : (TLam argT retT) -> G ⊢ arg : argT -> G ⊢ (App f arg) : retT
 where "G '⊢' t ':' T" := (term_typing G t T).
 
@@ -56,10 +49,10 @@ There are no free variables in well-typed terms (all should be bound to some λ)
 *)
 Fixpoint substitute (term: Term) (varname: label) (varterm: Term) : Term :=
   match term with
-  | Val (Lit n) => term
-  | Val (Lam x T t) =>
+  | Lit n => term
+  | Lam x T t =>
     if Nat.eqb x varname then term
-    else Val (Lam x T (substitute t varname varterm))
+    else Lam x T (substitute t varname varterm)
   | Var x =>
     if Nat.eqb x varname then varterm
     else term
@@ -68,30 +61,31 @@ Fixpoint substitute (term: Term) (varname: label) (varterm: Term) : Term :=
 
 Reserved Notation "t1 '-->' t2" (at level 40).
 Inductive reduces : Term -> Term -> Prop :=
-| red_beta : forall argname argT body arg, (App (Val (Lam argname argT body)) arg) --> (substitute body argname arg)
+| red_beta : forall argname argT body arg, (App (Lam argname argT body) arg) --> (substitute body argname arg)
 | red_app1 : forall t1 t1' t2, t1 --> t1' -> (App t1 t2) --> (App t1' t2)
 | red_app2 : forall t1 t2 t2', t2 --> t2' -> (App t1 t2) --> (App t1 t2')
 where "t1 '-->' t2" := (reduces t1 t2).
 
-Definition lam_id := Val (Lam (0) (TNat) (Var 0)).
+Definition lam_id := (Lam (0) (TNat) (Var 0)).
 Lemma id_typ : ∅ ⊢ lam_id : (TLam TNat TNat).
 unfold lam_id.
 apply ty_lam.
 apply ty_var. solveTcontains.
 Qed.
-Definition app_id := (App lam_id (Val (Lit 1))).
+Definition app_id := (App lam_id (Lit 1)).
 Lemma app1 : ∅ ⊢ app_id : TNat.
 eapply ty_app with TNat.
 * apply id_typ.
 * apply ty_lit.
 Qed.
-Lemma app_red : app_id --> Val (Lit 1).
+Lemma app_red : app_id --> (Lit 1).
   unfold app_id.
   apply red_beta.
 Qed.
 
 Inductive isValue : Term -> Prop :=
-| valisval : forall v, isValue (Val v).
+| litisval : forall n, isValue (Lit n)
+| lamisval : forall x T t, isValue (Lam x T t).
 
 Lemma emptyEnvHasNoVars1 : forall x T, Tcontains ∅ x T -> False.
   intros.
@@ -103,7 +97,7 @@ Lemma emptyEnvHasNoVars2 : forall x T, ∅ ⊢ Var x : T -> False.
   apply emptyEnvHasNoVars1 in H2.
   contradiction.
 Qed.
-Lemma litIsNotFun : forall T1 T2 n, ∅ ⊢ Val (Lit n) : TLam T1 T2 -> False.
+Lemma litIsNotFun : forall T1 T2 n, ∅ ⊢ (Lit n) : TLam T1 T2 -> False.
   intros.
   inversion H.
 Qed.
@@ -111,7 +105,8 @@ Qed.
 Theorem Progress : forall t T, ∅ ⊢ t : T -> isValue t \/ exists t', t --> t'.
   induction t.
   intros.
-  * left. apply valisval.
+  * left. apply litisval.
+  * left. apply lamisval.
   *
     intros.
     apply emptyEnvHasNoVars2 in H.
@@ -123,14 +118,13 @@ Theorem Progress : forall t T, ∅ ⊢ t : T -> isValue t \/ exists t', t --> t'
     destruct H3.
     **
       inversion H3.
-      destruct v.
       ***
-        assert (∅ ⊢ Val (Lit n) : TLam argT T).
-        **** rewrite -> H6. assumption.
-        **** apply litIsNotFun in H7.
-             contradiction.
+        assert (∅ ⊢ (Lit n) : TLam argT T).
+        rewrite H6. assumption.
+        apply litIsNotFun in H7.
+        contradiction.
       ***
-        exists (substitute t0 l t2).
+        exists (substitute t x t2).
         apply red_beta.
     **
       inversion H3.
@@ -142,7 +136,7 @@ Inductive is_free_in : label -> Term -> Prop :=
 | fv_var : forall x, is_free_in x (Var x)
 | fv_app1 : forall x t1 t2, is_free_in x t1 -> is_free_in x (App t1 t2)
 | fv_app2 : forall x t1 t2, is_free_in x t2 -> is_free_in x (App t1 t2)
-| fv_lam : forall x y t T, is_free_in x t -> x <> y -> is_free_in x (Val (Lam y T t))
+| fv_lam : forall x y t T, is_free_in x t -> x <> y -> is_free_in x (Lam y T t)
 .
 
 Definition closed (t: Term): Prop := forall x, not (is_free_in x t).
@@ -165,17 +159,23 @@ Corollary typableInEmptyIsClosed : forall t T, ∅ ⊢ t : T -> closed t.
     inversion H2.
 Qed.
 
-Lemma CanonicalForm1 : forall G v, G ⊢ (Val v) : TNat -> exists n, v = Lit n.
+Lemma CanonicalForm1 : forall G t, G ⊢ t : TNat -> isValue t -> exists n, t = Lit n.
   intros.
-  inversion H.
-  exists n.
-  trivial.
+  inversion H0.
+  * exists n. trivial.
+  * rewrite <- H1 in H.
+    inversion H.
 Qed.
-Lemma CanonicalForm2 : forall G v T1 T2, G ⊢ (Val v) : TLam T1 T2 -> exists x t, v = Lam x T1 t.
+Lemma CanonicalForm2 : forall G t T1 T2, G ⊢ t : TLam T1 T2 -> isValue t -> exists x t', t = Lam x T1 t'.
   intros.
-  inversion H.
-  exists arg. exists body.
-  trivial.
+  inversion H0.
+  * rewrite <- H1 in H.
+    inversion H.
+  * exists x. exists t0.
+    assert (T = T1).
+    ** rewrite <- H1 in H.
+       inversion H. trivial.
+    ** rewrite H2. trivial.
 Qed.
 
 Lemma Weakening : forall G G' t T,
@@ -187,59 +187,69 @@ Admitted.
 
 Lemma Substitution : forall G t1 T1 x t2 T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t2 : T2 -> G ⊢ substitute t2 x t1 : T2.
   induction t2. intros; inversion H.
-  * destruct v.
-    ** simpl.
-       inversion H1.
-       apply ty_lit.
-    ** simpl.
-       remember (l =? x) as Heq.
-       destruct Heq.
-       *** assert (l=x).
-           apply beq_nat_true; intuition.
-           apply Weakening with (G; x : T1).
-           trivial.
-           intros.
-           assert (x0 <> x).
-           intro. rewrite H4 in H3.
-           inversion H3. apply H10. auto.
-           intuition.
-           **** inversion H.
-                exfalso. apply H4. auto.
-                trivial.
-           **** apply tcontains_cons. trivial. auto.
-       *** assert (l<>x).
-           apply beq_nat_false; intuition.
-           
-
+  * simpl.
+    inversion H1.
+    apply ty_lit.
+  * simpl.
+    remember (l =? x) as Heq.
+    destruct Heq.
+    ** assert (l=x).
+       apply beq_nat_true; intuition.
+       admit.
+    (*
+       apply Weakening with (G; x : T1).
+       trivial.
+       intros.
+       assert (x0 <> x).
+       intro. rewrite H4 in H3.
+       inversion H3. apply H10. auto.
+       intuition.
+       **** inversion H.
+            exfalso. apply H4. auto.
+            trivial.
+       **** apply tcontains_cons. trivial. auto.
+       *)
+    ** assert (l<>x).
+       apply beq_nat_false; intuition.
+       admit.
   * simpl.
     remember (l =? x) as Heq.
     destruct Heq.
     ** assert (l = x).
-       apply beq_nat_true; intuition.
+       apply beq_nat_true; intuition. intros.
+       intuition.
        assert ((G; x : T1) ⊢ Var x : T2).
        ***
-         rewrite <- H2.
-         rewrite <- H2 in H1. trivial.
-       *** assert (T1 = T2).
-           **** inversion H3. inversion H6. trivial.
-                intuition.
-           **** rewrite <- H4.
-                eapply Weakening. exact H0.
-                intros.
-                exfalso.
-                assert (closed t1).
-                ***** eapply typableInEmptyIsClosed. exact H0.
-                ***** unfold closed in H6. apply H6 with x0. trivial.
+         rewrite <- H.
+         rewrite <- H in H2.
+         intuition.
+       ***
+         assert (T1 = T2).
+         ****
+           inversion H0.
+           inversion H5.
+           trivial.
+           intuition.
+         ****
+           rewrite <- H3.
+           eapply Weakening. exact H1.
+           intros.
+           exfalso.
+           assert (closed t1).
+           ***** eapply typableInEmptyIsClosed. exact H1.
+           ***** unfold closed in H5. apply H5 with x0. trivial.
     ** assert (l <> x).
-       apply beq_nat_false. intuition.
+       apply beq_nat_false. intuition. intros. intuition.
        apply Weakening with (G; x : T1).
-       trivial.
-       intros.
-       inversion H3.
-       intuition.
-       *** inversion H. exfalso. intuition. trivial.
-       *** apply tcontains_cons; intuition.
-  * simpl.
+  (*      trivial. *)
+  (*      intros. *)
+  (*      inversion H2. *)
+  (*      intuition. *)
+  (*      *** inversion H0. exfalso. intuition. trivial. *)
+  (*      *** apply tcontains_cons; intuition. *)
+       admit.
+       admit.
+  * simpl. intros. intuition.
     inversion H1.
     apply ty_app with argT.
     ** apply IHt2_1.
@@ -258,7 +268,7 @@ Qed.
 Theorem Preservation : forall t T t', ∅ ⊢ t : T /\ t --> t' -> ∅ ⊢ t' : T.
   induction t; intros; inversion H; inversion H1.
   * apply Substitution with argT.
-    assert (Ht : ∅ ⊢ App (Val (Lam argname argT body)) t2 : T).
+    assert (Ht : ∅ ⊢ App (Lam argname argT body) t2 : T).
     rewrite H3. auto.
     intuition.
     ** inversion Ht.
