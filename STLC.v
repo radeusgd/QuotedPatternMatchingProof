@@ -234,7 +234,7 @@ Lemma Substitution : forall t2 G t1 T1 x T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t
          inversion H2.
        ***
          assert (t=T2_1).
-         admit.
+         inversion H2. trivial.
          rewrite H.
          apply ty_lam.
          apply IHt2 with T1.
@@ -268,15 +268,11 @@ Lemma Substitution : forall t2 G t1 T1 x T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t
            ***** unfold closed in H5. apply H5 with x0. trivial.
     ** assert (l <> x).
        apply beq_nat_false. intuition. intros. intuition.
-       apply Weakening with (G; x : T1).
-  (*      trivial. *)
-  (*      intros. *)
-  (*      inversion H2. *)
-  (*      intuition. *)
-  (*      *** inversion H0. exfalso. intuition. trivial. *)
-  (*      *** apply tcontains_cons; intuition. *)
-       admit.
-       admit.
+       apply ty_var.
+       inversion H2.
+       inversion H4.
+       assert (l = x); intuition.
+       intuition.
   * simpl. intros. intuition.
     inversion H1.
     apply ty_app with argT.
@@ -284,7 +280,7 @@ Lemma Substitution : forall t2 G t1 T1 x T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t
        intuition. exact H0. intuition.
     ** eapply IHt2_2.
        intuition. exact H0. intuition.
-Admitted.
+Qed.
 
 Lemma AppIsApp : forall G t1 t2 T, G ⊢ App t1 t2 : T -> exists T', (G ⊢ t1 : TLam T' T) /\ (G ⊢ t2 : T').
   intros.
