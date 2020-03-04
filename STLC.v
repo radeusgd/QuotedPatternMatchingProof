@@ -42,7 +42,7 @@ Inductive term_typing : TypCtx -> Term -> TType -> Prop :=
 | ty_lam : forall G arg argT body bodyT, (G; arg : argT) ⊢ body : bodyT -> G ⊢ (Lam arg argT body) : (TLam argT bodyT)
 | ty_app : forall G f arg argT retT, G ⊢ f : (TLam argT retT) -> G ⊢ arg : argT -> G ⊢ (App f arg) : retT
 where "G '⊢' t ':' T" := (term_typing G t T).
-
+Hint Constructors term_typing.
 (*
 There are no free variables in well-typed terms (all should be bound to some λ), so we don't have to worry about avoiding capture.
 (TODO is that correct?)
@@ -68,9 +68,9 @@ where "t1 '-->' t2" := (reduces t1 t2).
 
 Definition lam_id := (Lam (0) (TNat) (Var 0)).
 Lemma id_typ : ∅ ⊢ lam_id : (TLam TNat TNat).
-unfold lam_id.
-apply ty_lam.
-apply ty_var. solveTcontains.
+  unfold lam_id.
+  apply ty_lam.
+  apply ty_var. solveTcontains.
 Qed.
 Definition app_id := (App lam_id (Lit 1)).
 Lemma app1 : ∅ ⊢ app_id : TNat.
@@ -97,9 +97,15 @@ Lemma emptyEnvHasNoVars2 : forall x T, ∅ ⊢ Var x : T -> False.
   apply emptyEnvHasNoVars1 in H2.
   contradiction.
 Qed.
-Lemma litIsNotFun : forall T1 T2 n, ∅ ⊢ (Lit n) : TLam T1 T2 -> False.
+Lemma litIsNotFun : forall G T1 T2 n, G ⊢ (Lit n) : TLam T1 T2 -> False.
   intros.
   inversion H.
+Qed.
+Lemma lamIsFun : forall G x Targ t Tres, G ⊢ Lam x Targ t : Tres -> exists T1 T2, Tres = TLam T1 T2.
+  intros.
+  inversion H.
+  exists Targ. exists bodyT.
+  auto.
 Qed.
 
 Theorem Progress : forall t T, ∅ ⊢ t : T -> isValue t \/ exists t', t --> t'.
@@ -183,36 +189,59 @@ Lemma Weakening : forall G G' t T,
   intros.
 
 Admitted.
+
+Lemma IndependentEnvOrder : forall t T G x1 T1 x2 T2, x1 <> x2 -> (G ; x1 : T1; x2 : T2) ⊢ t : T -> (G ; x2 : T2; x1 : T1) ⊢ t : T.
+  intros.
+  eapply Weakening.
+  exact H0.
+  intros.
+  intuition; inversion H2.
+  * solveTcontains. intuition.
+  * 
+
+Admitted.
 (* Lemma SimpleWeakening : forall G t T x T', *)
 
-Lemma Substitution : forall G t1 T1 x t2 T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t2 : T2 -> G ⊢ substitute t2 x t1 : T2.
+Lemma Substitution : forall t2 G t1 T1 x T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t2 : T2 -> G ⊢ substitute t2 x t1 : T2.
   induction t2. intros; inversion H.
   * simpl.
     inversion H1.
     apply ty_lit.
-  * simpl.
+  * simpl. intros.
     remember (l =? x) as Heq.
     destruct Heq.
     ** assert (l=x).
-       apply beq_nat_true; intuition.
-       admit.
-    (*
+       apply beq_nat_true; intuition. intros. intuition.
        apply Weakening with (G; x : T1).
        trivial.
        intros.
        assert (x0 <> x).
-       intro. rewrite H4 in H3.
-       inversion H3. apply H10. auto.
+       intro. rewrite H3 in H.
+       inversion H. intuition.
        intuition.
-       **** inversion H.
-            exfalso. apply H4. auto.
-            trivial.
-       **** apply tcontains_cons. trivial. auto.
-       *)
+       ****
+         inversion H4.
+         exfalso. apply H3. auto.
+         trivial.
+       ****
+         apply tcontains_cons. trivial. auto.
     ** assert (l<>x).
        apply beq_nat_false; intuition.
-       admit.
-  * simpl.
+       intros. intuition.
+       destruct T2.
+       ***
+         exfalso.
+         inversion H2.
+       ***
+         assert (t=T2_1).
+         admit.
+         rewrite H.
+         apply ty_lam.
+         apply IHt2 with T1.
+         intuition.
+         inversion H2.
+         apply IndependentEnvOrder. auto. auto.
+  * simpl. intros.
     remember (l =? x) as Heq.
     destruct Heq.
     ** assert (l = x).
@@ -220,16 +249,15 @@ Lemma Substitution : forall G t1 T1 x t2 T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t
        intuition.
        assert ((G; x : T1) ⊢ Var x : T2).
        ***
-         rewrite <- H.
-         rewrite <- H in H2.
+         rewrite <- H0.
+         rewrite <- H0 in H2.
          intuition.
        ***
          assert (T1 = T2).
          ****
            inversion H0.
-           inversion H5.
-           trivial.
-           intuition.
+           inversion H.
+           inversion H6. trivial. intuition.
          ****
            rewrite <- H3.
            eapply Weakening. exact H1.
@@ -252,10 +280,10 @@ Lemma Substitution : forall G t1 T1 x t2 T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t
   * simpl. intros. intuition.
     inversion H1.
     apply ty_app with argT.
-    ** apply IHt2_1.
-       intuition.
-    ** apply IHt2_2.
-       intuition.
+    ** eapply IHt2_1.
+       intuition. exact H0. intuition.
+    ** eapply IHt2_2.
+       intuition. exact H0. intuition.
 Admitted.
 
 Lemma AppIsApp : forall G t1 t2 T, G ⊢ App t1 t2 : T -> exists T', (G ⊢ t1 : TLam T' T) /\ (G ⊢ t2 : T').
