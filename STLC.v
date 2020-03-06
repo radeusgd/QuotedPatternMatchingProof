@@ -144,6 +144,7 @@ Inductive is_free_in : label -> Term -> Prop :=
 | fv_app2 : forall x t1 t2, is_free_in x t2 -> is_free_in x (App t1 t2)
 | fv_lam : forall x y t T, is_free_in x t -> x <> y -> is_free_in x (Lam y T t)
 .
+Hint Constructors is_free_in.
 
 Definition closed (t: Term): Prop := forall x, not (is_free_in x t).
 
@@ -198,11 +199,52 @@ Lemma CanonicalForm2 : forall G t T1 T2, G ⊢ t : TLam T1 T2 -> isValue t -> ex
     ** rewrite H2. trivial.
 Qed.
 
-Lemma Weakening : forall G G' t T,
-    G ⊢ t : T -> (forall x T', is_free_in x t -> Tcontains G x T' <-> Tcontains G' x T') -> G' ⊢ t : T.
-  intros.
+Ltac assertEq H := assert H; ((try apply beq_nat_true); (try apply beq_nat_false)); intuition.
 
-Admitted.
+Lemma Weakening : forall G t T,
+    G ⊢ t : T -> forall G', (forall x T', is_free_in x t -> Tcontains G x T' <-> Tcontains G' x T') -> G' ⊢ t : T.
+  intros until T. intro.
+  induction H; intros.
+  * auto.
+  * apply ty_var.
+    eapply H0.
+    auto.
+    auto.
+  * apply ty_lam.
+    apply IHterm_typing.
+    intros.
+    remember (x =? arg) as xeqarg.
+    destruct xeqarg.
+    ** assertEq (x = arg); rewrite H2; rewrite H2 in H3; inversion H3.
+       apply tcontains_head.
+       contradiction.
+       apply tcontains_head.
+       contradiction.
+    ** assertEq (x <> arg).
+       ***
+         solveTcontains.
+         inversion H3.
+         exfalso. intuition.
+         apply H0.
+         auto.
+         trivial.
+       ***
+         solveTcontains.
+         inversion H3.
+         exfalso. intuition.
+         apply H0.
+         auto.
+         trivial.
+  * apply ty_app with argT.
+    ** apply IHterm_typing1.
+       intros.
+       apply H1.
+       auto.
+    ** apply IHterm_typing2.
+       intros.
+       apply H1.
+       auto.
+Qed.
 
 Lemma IndependentEnvOrder : forall t T G x1 T1 x2 T2, x1 <> x2 -> (G ; x1 : T1; x2 : T2) ⊢ t : T -> (G ; x2 : T2; x1 : T1) ⊢ t : T.
   intros.
