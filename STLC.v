@@ -255,14 +255,27 @@ Lemma IndependentEnvOrder : forall t T G x1 T1 x2 T2, x1 <> x2 -> (G ; x1 : T1; 
   * solveTcontains. intuition.
   * remember (x1 =? x) as xx1.
     destruct xx1.
-    ** assert (x1 = x). try apply beq_nat_true; auto.
+    ** assertEq (x1 = x).
        rewrite H10.
-       admit.
-    ** admit.
+       rewrite H10 in H8.
+       inversion H8.
+       apply tcontains_head.
+       contradiction.
+    ** assertEq (x1 <> x).
+       inversion H8; try contradiction.
+       solveTcontains.
   * solveTcontains. intuition.
-  * 
-Admitted.
-(* Lemma SimpleWeakening : forall G t T x T', *)
+  * remember (x =? x2). destruct b.
+    ** assertEq (x = x2).
+       rewrite H10.
+       rewrite H10 in H8.
+       inversion H8; try contradiction.
+       apply tcontains_head.
+    ** assertEq (x <> x2).
+       inversion H8.
+       exfalso. intuition.
+       solveTcontains.
+Qed.
 
 Lemma Substitution : forall t2 G t1 T1 x T2, ∅ ⊢ t1 : T1 /\ G ; x : T1 ⊢ t2 : T2 -> G ⊢ substitute t2 x t1 : T2.
   induction t2. intros; inversion H.
