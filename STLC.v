@@ -147,12 +147,26 @@ Inductive is_free_in : label -> Term -> Prop :=
 
 Definition closed (t: Term): Prop := forall x, not (is_free_in x t).
 
-Lemma free_in_context : forall G x t T,
+Lemma free_in_context : forall t T G x,
     is_free_in x t -> G ⊢ t : T -> exists T', Tcontains G x T'.
   intros.
-  induction t.
-
-Admitted.
+  induction H0.
+  * inversion H.
+  * inversion H.
+    exists t. trivial.
+  * inversion H.
+    assert (exists T', Tcontains (G; arg : argT) x T').
+    ** apply IHterm_typing. trivial.
+    ** inversion H7.
+       rename x1 into T''.
+       exists T''.
+       inversion H8.
+       exfalso. intuition.
+       trivial.
+  * inversion H.
+    ** apply IHterm_typing1. trivial.
+    ** apply IHterm_typing2. trivial.
+Qed.
 
 Corollary typableInEmptyIsClosed : forall t T, ∅ ⊢ t : T -> closed t.
   intros.
@@ -197,8 +211,14 @@ Lemma IndependentEnvOrder : forall t T G x1 T1 x2 T2, x1 <> x2 -> (G ; x1 : T1; 
   intros.
   intuition; inversion H2.
   * solveTcontains. intuition.
+  * remember (x1 =? x) as xx1.
+    destruct xx1.
+    ** assert (x1 = x). try apply beq_nat_true; auto.
+       rewrite H10.
+       admit.
+    ** admit.
+  * solveTcontains. intuition.
   * 
-
 Admitted.
 (* Lemma SimpleWeakening : forall G t T x T', *)
 
