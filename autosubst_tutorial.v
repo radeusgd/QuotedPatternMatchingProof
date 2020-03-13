@@ -134,41 +134,61 @@ Theorem Progress : forall t T, ∅ ⊢ t : T -> isValue t \/ exists t', t --> t'
     ** inversion H6. eauto.
 Qed.
 
+Lemma SubstitutionGeneralized : forall (G1 G2 : ctx) (s: term) (A: type) (σ: var -> term),
+    G1 ⊢ s : A -> (forall x B, atn G1 x B -> G2 ⊢ σ x : B) ->
+             G2 ⊢ s.[σ] : A.
+  Admitted.
+
 Lemma Substitution : forall t2 G t1 T1 T2, G ⊢ t1 : T1 /\ (T1 :: G) ⊢ t2 : T2 -> G ⊢ t2.[t1/] : T2.
-  intro.
-  induction t2; intros.
-  *
-    inversion H.
-    inversion H1.
+  intros.
+  inversion H.
+  eapply SubstitutionGeneralized.
+  exact H1.
+  intros.
+  destruct x.
+  * cbn in H2. subst.
     autosubst.
-  * inversion H. inversion H1.
-    destruct x.
-    **
-      cbn in H3.
-      rewrite H3.
-      autosubst.
-    ** subst.
-       assert ((Var (S x)).[t1/] = Var x).
-       autosubst.
-       rewrite H2.
-       inversion H1.
-       cbn in H5.
-       auto.
-  * assert ((App t2_1 t2_2).[t1/] = (App t2_1.[t1/] t2_2.[t1/])).
-    autosubst. rewrite H0.
-    inversion H.
-    inversion H2.
-    subst.
-    apply Ty_App with A.
-    ** apply IHt2_1 with T1. intuition.
-    ** apply IHt2_2 with T1. intuition.
-  * inversion H.
-    inversion H1.
-    apply Ty_Lam.
-    subst.
-    admit.
-    (* apply IHt2 with T1. intuition. *)
-Admitted.
+  * cbn in H2.
+    assert (G ⊢ Var x : B).
+    auto.
+    autosubst.
+Qed.
+
+(* Lemma Substitution : forall t2 G t1 T1 T2, G ⊢ t1 : T1 /\ (T1 :: G) ⊢ t2 : T2 -> G ⊢ t2.[t1/] : T2. *)
+(*   intro. *)
+(*   induction t2; intros. *)
+(*   * *)
+(*     inversion H. *)
+(*     inversion H1. *)
+(*     autosubst. *)
+(*   * inversion H. inversion H1. *)
+(*     destruct x. *)
+(*     ** *)
+(*       cbn in H3. *)
+(*       rewrite H3. *)
+(*       autosubst. *)
+(*     ** subst. *)
+(*        assert ((Var (S x)).[t1/] = Var x). *)
+(*        autosubst. *)
+(*        rewrite H2. *)
+(*        inversion H1. *)
+(*        cbn in H5. *)
+(*        auto. *)
+(*   * assert ((App t2_1 t2_2).[t1/] = (App t2_1.[t1/] t2_2.[t1/])). *)
+(*     autosubst. rewrite H0. *)
+(*     inversion H. *)
+(*     inversion H2. *)
+(*     subst. *)
+(*     apply Ty_App with A. *)
+(*     ** apply IHt2_1 with T1. intuition. *)
+(*     ** apply IHt2_2 with T1. intuition. *)
+(*   * inversion H. *)
+(*     inversion H1. *)
+(*     apply Ty_Lam. *)
+(*     subst. *)
+(*     admit. *)
+(*     (* apply IHt2 with T1. intuition. *) *)
+(* Admitted. *)
 
 Theorem Preservation : forall s A G,
   G ⊢ s : A -> forall s',
