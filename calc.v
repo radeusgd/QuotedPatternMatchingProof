@@ -245,6 +245,7 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 | E_Beta : forall t T1 T2 v,
     (App (Lam T1 t : (T1 ==> T2)) v : T2) -->(L0) substitute v t
 where "t1 '-->(' L ')' t2" := (reducts L t1 t2).
+Hint Constructors reducts : reducts.
 
 (* PROPERTIES *)
 
@@ -254,3 +255,7 @@ Inductive isvalue : typedterm -> Prop :=
 | Val_Box : forall t T, isvalue (Box t : T)
 .
 
+Definition id_nat := (Lam TNat (VAR 0 : TNat) : TNat ==> TNat).
+Lemma test_red : (App id_nat (Nat 42 : TNat) : TNat) -->(L0) (Nat 42 : TNat).
+  apply E_Beta.
+Qed.
