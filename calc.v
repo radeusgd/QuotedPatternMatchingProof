@@ -41,6 +41,44 @@ with term :=
 (* | PatternMatch (e : typedterm) (pat : pattrn) (success failure : typedterm) *)
 .
 Notation "u ':' T" := (TypedTerm u T) (at level 49).
+Scheme typedterm_mutualind := Induction for typedterm Sort Prop
+  with term_mutualind := Induction for term Sort Prop.
+Check typedterm_mutualind.
+Lemma syntactic :
+  forall (P : typedterm -> Prop),
+    (forall n : nat, forall T : type, P (Nat n : T)) ->
+    (forall x : DeBruijnIndex, forall T : type, P (VAR x : T)) ->
+    (forall (argT : type)
+       (ebody : typedterm),
+        P ebody -> forall T : type, P (Lam argT ebody : T)) ->
+    (forall e1 : typedterm,
+        P e1 ->
+        forall e2 : typedterm,
+          P e2 -> forall T : type, P (App e1 e2 : T)) ->
+    (forall e : typedterm,
+        P e -> forall T : type, P (Lift e : T)) ->
+    (forall e : typedterm,
+        P e -> forall T : type, P (Quote e : T)) ->
+    (forall e : typedterm,
+        P e -> forall T : type, P (Splice e : T)) ->
+    forall t : typedterm, P t
+.
+  intros.
+  eapply typedterm_mutualind.
+  - intro. intro.
+    exact H6.
+  - auto.
+  - auto.
+  - auto.
+  - auto.
+  - auto.
+  - auto.
+  - auto.
+Qed.
+
+(* Definition RemoveType (tt : typedterm) : term := match tt with *)
+(*                                                  | TypedTerm t _ => t *)
+(*                                                  end. *)
 
 (* TODO resolve this name conflict in a better way *)
 Instance var_term : Var term := {
@@ -200,6 +238,11 @@ Definition substitute (v : typedterm) (t : typedterm) : typedterm :=
   match v with
   | TypedTerm vt _ => subst vt 0 t
   end.
+Notation "t1 .[ t2 /]" := (substitute t2 t1) (at level 45).
+Lemma fold_subst : forall u t T, (substitute (u : T) t) = subst u 0 t.
+  intros.
+  auto.
+Qed.
 
 (* TYPES *)
 
@@ -239,7 +282,7 @@ Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
 (* | T_Fix : TODO *)
 (* | T_Pat : TODO *)
 where "G '⊢(' L ')' t '∈' T" := (typing_judgement G L t T).
-Hint Constructors typing_judgement : typing_judgement.
+Hint Constructors typing_judgement.
 
 (* SEMANTICS *)
 Reserved Notation "t1 '-->(' L ')' t2" (at level 48).
@@ -261,14 +304,14 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
     t -->(L0) t' ->
     (Lift t : T) -->(L0) (Lift t' : T)
 | E_Beta : forall t T1 T2 v,
-    (App (Lam T1 t : (T1 ==> T2)) v : T2) -->(L0) substitute v t
+    (App (Lam T1 t : (T1 ==> T2)) v : T2) -->(L0) t.[v/]
 (* | E_Fix : TODO *)
 (* | E_Fix_Red : TODO *)
 (* | E_Pat : TODO *)
 (* | E_Pat_Succ : TODO *)
 (* | E_Pat_Fail : TODO *)
 where "t1 '-->(' L ')' t2" := (reducts L t1 t2).
-Hint Constructors reducts : reducts.
+Hint Constructors reducts.
 
 (* PROPERTIES *)
 Inductive isplain : typedterm -> Prop :=
@@ -281,12 +324,15 @@ isplaint : term -> Prop :=
 | Plain_app : forall t1 t2, isplain t1 -> isplain t2 -> isplaint (App t1 t2)
 (* | Plain_fix : TODO *)
 .
+Hint Constructors isplain.
+Hint Constructors isplaint.
 
 Inductive isvalue : typedterm -> Prop :=
 | Val_Nat : forall n T, isvalue (Nat n : T)
 | Val_Lam : forall t T1 T, isvalue (Lam T1 t : T)
 | Val_Box : forall t T, isplain t -> isvalue (Quote t : T)
 .
+Hint Constructors isvalue.
 
 Definition id_nat := (Lam TNat (VAR 0 : TNat) : TNat ==> TNat).
 Lemma test_red : (App id_nat (Nat 42 : TNat) : TNat) -->(L0) (Nat 42 : TNat).
@@ -323,3 +369,51 @@ Lemma CanonicalForms3 : forall G t T,
   exact H1.
   congruence.
 Qed.
+
+Definition RestrictedLevel (G : TypEnv) (L : Level) : Prop := True.
+
+Lemma LevelProgress0 : forall G t T,
+    RestrictedLevel G L1 ->
+    G ⊢(L0) t ∈ T ->
+    isvalue t \/ exists t', t -->(L0) t'
+with LevelProgress1 : forall G t T,
+    RestrictedLevel G L1 ->
+    G ⊢(L1) t ∈ T ->
+    not (isvalue (Quote t : ⧈T)) ->
+    exists t', t -->(L1) t'.
+  - intros. eapply typedterm_mutualind. admit.
+Admitted.
+
+Theorem Progress : forall t T,
+    ∅ ⊢(L0) t ∈ T ->
+    isvalue t \/ exists t', t -->(L0) t'.
+  intros.
+  eapply LevelProgress0.
+  unfold RestrictedLevel. trivial.
+  exact H.
+Qed.
+
+Ltac sub :=
+  (* unfold substitute; *)
+  (match goal with
+         | |- context[substitute ?t _] => destruct t
+         (* | h: context[substitute ?t _] |- _ => destruct t *)
+  end; unfold substitute; simpl_subst_all).
+  (* repeat match goal with *)
+  (*        | [ t : typedterm |- _ ] => *)
+  (*          destruct t *)
+  (*        end; unfold substitute; simpl_subst_all. *)
+
+Ltac fold_sub := repeat erewrite <- fold_subst.
+  (* ((assert (subst u 0 t = substitute (u : T) t) as Happ); *)
+  (* eapply fold_subst; rewrite Happ; destruct Happ). *)
+
+Lemma Substitution : forall t2 Li Lj G t1 T1 T2,
+    G ⊢(Lj) t1 ∈ T1 ->
+    (extendEnv G Lj T1) ⊢(Li) t2 ∈ T2 ->
+    (* special care will have to be taken here with patterns *)
+    G ⊢(Li) t2.[t1/] ∈ T2.
+  induction t2 using syntactic; intros; inversion H0; subst; try solve [sub; fold_sub; eauto].
+  - admit.
+  - admit.
+Admitted.
