@@ -411,11 +411,32 @@ Ltac fold_sub := repeat erewrite <- fold_subst.
 Compute (shift 0 (VAR 1 : TNat)).
 Compute (subst (Nat 42) 1 (VAR 0 : TNat)).
 
+Lemma AscribedTypeIsCorrect : forall G L t T T',
+    G ⊢(L) (t : T) ∈ T' -> T = T'.
+  intros.
+  inversion H; auto.
+Qed.
+
 Lemma ContextExtensionInvariance : forall t G L' T' L T,
     (extendEnv G L' T') ⊢(L) (shift 0 t) ∈ T ->
     G ⊢(L) t ∈ T.
 
 Admitted.
+
+Lemma Substitution2 : forall t2 Li Lj x G t1 T1 T2,
+    G ⊢(Lj) (t1 : T1) ∈ T1 ->
+    (insert x (Lj, T1) G) ⊢(Li) t2 ∈ T2 ->
+    (* special care will have to be taken here with patterns *)
+    G ⊢(Li) subst t1 x t2 ∈ T2.
+  induction t2 using syntactic; intros; inversion H0; subst; try (simpl_subst_all; eauto).
+  - admit.
+  - simpl.
+    apply T_Abs.
+    eapply IHt2.
+    unfold extendEnv in *.
+    
+    
+
 Lemma Substitution : forall t2 Li Lj G t1 T1 T2,
     G ⊢(Lj) t1 ∈ T1 ->
     (extendEnv G Lj T1) ⊢(Li) t2 ∈ T2 ->
@@ -424,7 +445,13 @@ Lemma Substitution : forall t2 Li Lj G t1 T1 T2,
   induction t2 using syntactic; intros; inversion H0; subst; try solve [sub; fold_sub; eauto].
   - destruct x.
     + sub.
-      admit.
+      unfold extendEnv in H6.
+      inversion H6. lookup_insert_all.
+      subst.
+      assert (t = T2).
+      eapply AscribedTypeIsCorrect. eauto.
+      rewrite H1 in H.
+      trivial.
     + sub.
       assert (x - 0 = x).
       omega.
@@ -434,7 +461,14 @@ Lemma Substitution : forall t2 Li Lj G t1 T1 T2,
       auto.
   - sub. simpl.
     apply T_Abs.
-Admitted.
+    assert (t = T1).
+    eapply AscribedTypeIsCorrect. eauto. rewrite H1 in H.
+    enough (subst (shift 0 u) 1 t2 = t2 .[ u : t /]).
+    + rewrite H2.
+      eapply IHt2.
+      
+
+
 
 Theorem Preservation : forall t1 T G L,
     G ⊢(L) t1 ∈ T ->
