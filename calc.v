@@ -408,12 +408,56 @@ Ltac fold_sub := repeat erewrite <- fold_subst.
   (* ((assert (subst u 0 t = substitute (u : T) t) as Happ); *)
   (* eapply fold_subst; rewrite Happ; destruct Happ). *)
 
+Compute (shift 0 (VAR 1 : TNat)).
+Compute (subst (Nat 42) 1 (VAR 0 : TNat)).
+
+Lemma ContextExtensionInvariance : forall t G L' T' L T,
+    (extendEnv G L' T') ⊢(L) (shift 0 t) ∈ T ->
+    G ⊢(L) t ∈ T.
+
+Admitted.
 Lemma Substitution : forall t2 Li Lj G t1 T1 T2,
     G ⊢(Lj) t1 ∈ T1 ->
     (extendEnv G Lj T1) ⊢(Li) t2 ∈ T2 ->
     (* special care will have to be taken here with patterns *)
     G ⊢(Li) t2.[t1/] ∈ T2.
   induction t2 using syntactic; intros; inversion H0; subst; try solve [sub; fold_sub; eauto].
-  - admit.
-  - admit.
+  - destruct x.
+    + sub.
+      admit.
+    + sub.
+      assert (x - 0 = x).
+      omega.
+      rewrite H1.
+      eapply ContextExtensionInvariance.
+      simpl_lift_goal.
+      auto.
+  - sub. simpl.
+    apply T_Abs.
 Admitted.
+
+Theorem Preservation : forall t1 T G L,
+    G ⊢(L) t1 ∈ T ->
+    forall t2,
+    t1 -->(L) t2 ->
+    G ⊢(L) t2 ∈ T.
+  intros until L.
+  intro.
+  induction H; intros.
+  - inversion H.
+  - inversion H0.
+  - inversion H0. subst.
+    assert (extendEnv G L1 T1 ⊢( L1) t' ∈ T2).
+    apply IHtyping_judgement. trivial.
+    apply T_Abs. trivial.
+  - inversion H1; subst; try (eapply T_App; eauto).
+    eapply Substitution. eauto.
+    inversion H. auto.
+  - inversion H0; subst.
+    + inversion H; subst. apply T_Box. auto.
+    + apply T_Lift. apply IHtyping_judgement. easy.
+  - inversion H0; subst. eapply T_Box.
+    apply IHtyping_judgement. easy.
+  - inversion H0; subst.
+    apply T_Unbox. apply IHtyping_judgement. trivial.
+Qed.
