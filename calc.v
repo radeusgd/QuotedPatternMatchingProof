@@ -251,20 +251,22 @@ Inductive Level := L0 | L1.
 Definition TypEnv := env (Level * type).
 Definition emptyEnv : env (Level * type) := empty (Level * type).
 Notation "∅" := emptyEnv.
-Definition extendEnv (G : TypEnv) (L : Level) (T : type) : TypEnv := (insert 0 (L, T) G).
+(* Notation "'extendEnv' G L T" := (insert 0 (L, T) G) (at level 49). *)
+(* Definition extendEnv (G : TypEnv) (L : Level) (T : type) : TypEnv := (insert 0 (L, T) G). *)
+(* Hint Unfold extendEnv. *)
 (* Notation "G ';' L T" := (insert 0 (L, T) G) (at level 49). *)
 
-Definition env_has (G : TypEnv) (x : DeBruijnIndex) (L : Level) (T : type) : Prop :=
-  lookup x G = Some (L, T).
+(* Definition env_has (G : TypEnv) (x : DeBruijnIndex) (L : Level) (T : type) : Prop := *)
+  (* lookup x G = Some (L, T). *)
 
 Reserved Notation "G '⊢(' L ')' t '∈' T" (at level 40, t at level 59, T at level 59).
 Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
 | T_Nat : forall L G n, G ⊢(L) (Nat n : TNat) ∈ TNat
 | T_Var : forall L G x T,
-    env_has G x L T ->
+    lookup x G = Some (L, T) ->
     G ⊢(L) (VAR x : T) ∈ T
 | T_Abs : forall L G T1 T2 body,
-    extendEnv G L T1 ⊢(L) body ∈ T2 ->
+    insert 0 (L, T1) G ⊢(L) body ∈ T2 ->
     G ⊢(L) (Lam T1 body : T1 ==> T2) ∈ (T1 ==> T2)
 | T_App : forall L G T1 T2 t1 t2,
     G ⊢(L) t1 ∈ (T1 ==> T2) ->
@@ -417,58 +419,51 @@ Lemma AscribedTypeIsCorrect : forall G L t T T',
   inversion H; auto.
 Qed.
 
-Lemma ContextExtensionInvariance : forall t G L' T' L T,
-    (extendEnv G L' T') ⊢(L) (shift 0 t) ∈ T ->
-    G ⊢(L) t ∈ T.
+(* Based on https://github.com/coq-community/dblib/blob/master/src/DemoLambda.v *)
 
-Admitted.
+Lemma Weakening: forall G L t T,
+  G ⊢(L) t ∈ T ->
+  forall x L' T' G',
+  insert x (L', T') G = G' ->
+  G' ⊢(L) (shift x t) ∈ T.
+  induction 1; intros; subst; simpl_lift_goal;
+    econstructor; eauto with lookup_insert insert_insert.
+Qed.
 
-Lemma Substitution2 : forall t2 Li Lj x G t1 T1 T2,
-    G ⊢(Lj) (t1 : T1) ∈ T1 ->
-    (insert x (Lj, T1) G) ⊢(Li) t2 ∈ T2 ->
-    (* special care will have to be taken here with patterns *)
-    G ⊢(Li) subst t1 x t2 ∈ T2.
-  induction t2 using syntactic; intros; inversion H0; subst; try (simpl_subst_all; eauto).
-  - admit.
-  - simpl.
-    apply T_Abs.
+Lemma Substitution : forall t2 G x Lo Li T1 T2,
+  (insert x (Li, T1) G) ⊢(Lo) t2 ∈ T2 ->
+  forall t1,
+  G ⊢(Li) (t1 : T1) ∈ T1 ->
+  G ⊢(Lo) (subst t1 x t2) ∈ T2.
+  induction t2 using syntactic; intros; inversion H; subst; try (simpl_subst_all; eauto).
+  - unfold subst_idx; dblib_by_cases; lookup_insert_all; eauto.
+    intro. subst. trivial.
+  - econstructor.
     eapply IHt2.
-    unfold extendEnv in *.
-    
-    
+    + enough (insert (1 + x) (Li, T1) (insert 0 (Lo, argT) G) = insert 0 (Lo, argT) (insert x (Li, T1) G)).
+      rewrite H1. trivial.
+      insert_insert.
+    + enough ((shift 0 (t1 : T1)) = (shift 0 t1) : T1).
+      rewrite <- H1.
+      eapply Weakening.
+      eauto.
+      eauto.
+      eauto.
+Qed.
 
-Lemma Substitution : forall t2 Li Lj G t1 T1 T2,
+Lemma SubstitutionSimple : forall t2 Li Lj G t1 T1 T2,
     G ⊢(Lj) t1 ∈ T1 ->
-    (extendEnv G Lj T1) ⊢(Li) t2 ∈ T2 ->
+    (insert 0 (Lj, T1) G) ⊢(Li) t2 ∈ T2 ->
     (* special care will have to be taken here with patterns *)
     G ⊢(Li) t2.[t1/] ∈ T2.
-  induction t2 using syntactic; intros; inversion H0; subst; try solve [sub; fold_sub; eauto].
-  - destruct x.
-    + sub.
-      unfold extendEnv in H6.
-      inversion H6. lookup_insert_all.
-      subst.
-      assert (t = T2).
-      eapply AscribedTypeIsCorrect. eauto.
-      rewrite H1 in H.
-      trivial.
-    + sub.
-      assert (x - 0 = x).
-      omega.
-      rewrite H1.
-      eapply ContextExtensionInvariance.
-      simpl_lift_goal.
-      auto.
-  - sub. simpl.
-    apply T_Abs.
-    assert (t = T1).
-    eapply AscribedTypeIsCorrect. eauto. rewrite H1 in H.
-    enough (subst (shift 0 u) 1 t2 = t2 .[ u : t /]).
-    + rewrite H2.
-      eapply IHt2.
-      
-
-
+  intros.
+  sub.
+  eapply Substitution; eauto.
+  remember H as H2. clear HeqH2.
+  apply AscribedTypeIsCorrect in H.
+  subst.
+  trivial.
+Qed.
 
 Theorem Preservation : forall t1 T G L,
     G ⊢(L) t1 ∈ T ->
@@ -481,11 +476,11 @@ Theorem Preservation : forall t1 T G L,
   - inversion H.
   - inversion H0.
   - inversion H0. subst.
-    assert (extendEnv G L1 T1 ⊢( L1) t' ∈ T2).
+    assert (insert 0 (L1, T1) G ⊢( L1) t' ∈ T2).
     apply IHtyping_judgement. trivial.
     apply T_Abs. trivial.
   - inversion H1; subst; try (eapply T_App; eauto).
-    eapply Substitution. eauto.
+    eapply SubstitutionSimple. eauto.
     inversion H. auto.
   - inversion H0; subst.
     + inversion H; subst. apply T_Box. auto.
