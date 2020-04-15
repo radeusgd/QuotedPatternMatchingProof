@@ -329,12 +329,76 @@ isplaint : term -> Prop :=
 Hint Constructors isplain.
 Hint Constructors isplaint.
 
+Fixpoint decide_isplain (t : typedterm) : bool :=
+  match t with
+  | TypedTerm t' _ =>
+    match t' with
+    | Nat _ => true
+    | VAR _ => true
+    | Lam _ ebody => decide_isplain ebody
+    | App e1 e2 => (decide_isplain e1) && (decide_isplain e2)
+    | _ => false
+    end
+  end.
+
+Hint Immediate Bool.andb_true_iff.
+
+Lemma isplain_decidable (t : typedterm) :
+  decide_isplain t = true <-> isplain t.
+  induction t using syntactic; intuition; eauto; try solve [inversion H0 | inversion H1; inversion H3].
+  - cbn. inversion H1. inversion H3. subst. auto.
+  - inversion H3.
+    apply Bool.andb_true_iff in H5.
+    intuition.
+  - cbn. inversion H3. inversion H5. subst. intuition.
+Qed.
+
+Lemma isplain_decidable2 (t : typedterm) :
+  {isplain t} + {~ isplain t}.
+  remember (decide_isplain t) as ipt.
+  destruct ipt.
+  left.
+  apply isplain_decidable. auto.
+  right. intro.
+  apply isplain_decidable in H. congruence.
+Qed.
+
 Inductive isvalue : typedterm -> Prop :=
 | Val_Nat : forall n T, isvalue (Nat n : T)
 | Val_Lam : forall t T1 T, isvalue (Lam T1 t : T)
 | Val_Box : forall t T, isplain t -> isvalue (Quote t : T)
 .
 Hint Constructors isvalue.
+
+Fixpoint decide_isvalue (t : typedterm) : bool :=
+  match t with
+  | TypedTerm t' _ =>
+    match t' with
+    | Nat _ => true
+    | Lam _ ebody => true
+    | Quote t => decide_isplain t
+    | _ => false
+    end
+  end.
+
+Lemma isvalue_decidable (t : typedterm) : isvalue t <-> decide_isvalue t = true.
+  induction t using syntactic; intuition; try (inversion H); try inversion H1.
+  - inversion H3.
+  - cbv in H3. congruence.
+  - subst. cbn.
+    apply isplain_decidable. auto.
+  - constructor. apply isplain_decidable. auto.
+Qed.
+
+Lemma isvalue_decidable2 (t : typedterm) : {isvalue t} + {~ isvalue t}.
+  remember (decide_isvalue t) as ivt.
+  destruct ivt.
+  left.
+  apply isvalue_decidable. auto.
+  right.
+  intro.
+  apply isvalue_decidable in H. congruence.
+Qed.
 
 Definition id_nat := (Lam TNat (VAR 0 : TNat) : TNat ==> TNat).
 Lemma test_red : (App id_nat (Nat 42 : TNat) : TNat) -->(L0) (Nat 42 : TNat).
@@ -372,27 +436,95 @@ Lemma CanonicalForms3 : forall G t T,
   congruence.
 Qed.
 
-Definition RestrictedLevel (G : TypEnv) (L : Level) : Prop := True.
+Definition RestrictedLevel (G : TypEnv) (L : Level) : Prop := forall x L' T', lookup x G = Some (L', T') -> L' = L.
 
-Lemma LevelProgress0 : forall G t T,
+
+Ltac goL0 := left; constructor; trivial.
+Ltac goL1 := right; constructor; trivial; intros.
+
+
+Lemma LevelProgress : forall t G T L,
     RestrictedLevel G L1 ->
-    G ⊢(L0) t ∈ T ->
-    isvalue t \/ exists t', t -->(L0) t'
-with LevelProgress1 : forall G t T,
-    RestrictedLevel G L1 ->
-    G ⊢(L1) t ∈ T ->
-    not (isvalue (Quote t : ⧈T)) ->
-    exists t', t -->(L1) t'.
-  - intros. eapply typedterm_mutualind. admit.
+    G ⊢(L) t ∈ T ->
+    (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L = L1 /\ (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t')).
+  intro.
+  induction t using syntactic; intros; destruct L; try solve [intuition].
+  - goL1.
+    enough (isvalue (Quote (Nat n : T) : ⧈T0)).
+    congruence.
+    eauto.
+  - goL0.
+    exfalso.
+    unfold RestrictedLevel in H.
+    inversion H0. subst.
+    apply H in H6. congruence.
+  - goL1.
+    exfalso.
+    apply H1.
+    eauto.
+  - goL1.
+    destruct (isvalue_decidable2 t).
+    + admit.
+    + 
+    (* remember (decide_isplain t) as IsPlainT. *)
+    (* destruct IsPlainT. *)
+    (* + assert (isplain t). *)
+    (*   unfold isplain. auto. *)
+    (*   exfalso. apply H1. auto. *)
+    (* + *)
+    (*   inversion H0; subst. *)
+    (*   assert (L1 = L0 /\ *)
+    (*     (isvalue t \/ (exists t' : typedterm, t -->( L0) t')) \/ *)
+    (*     L1 = L1 /\ *)
+    (*     (~ isvalue (Quote t : ⧈ T2) -> *)
+    (*      exists t' : typedterm, t -->( L1) t')). *)
+    (*   eapply IHt. *)
+    (*   2: { *)
+    (*     eauto. *)
+    (*   } *)
+    (*   * unfold RestrictedLevel. *)
+    (*     intros. *)
+    (*     destruct x. *)
+    (*     lookup_insert_all. auto. *)
+    (*     lookup_insert_all. eapply H. eauto. *)
+    (*   * destruct H2. *)
+    (*     ** destruct H2. congruence. *)
+    (*     ** *)
+    (*       assert (~ isvalue (Quote t : ⧈ T2) -> *)
+    (*               exists t' : typedterm, t -->( L1) t'). *)
+    (*       intuition. *)
+          
+
+    
+
 Admitted.
 
+Lemma LevelProgress0 : forall G t T,
+    G ⊢(L0) t ∈ T ->
+    RestrictedLevel G L1 ->
+    isvalue t \/ exists t', t -->(L0) t'.
+  intros.
+  enough ((L0 = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L0 = L1 /\ (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t'))).
+  - destruct H1; intuition.
+    + congruence.
+  - eapply LevelProgress; eauto.
+Qed.
+(* with LevelProgress1 : forall G t T, *)
+(*     RestrictedLevel G L1 -> *)
+(*     G ⊢(L1) t ∈ T -> *)
+(*     not (isvalue (Quote t : ⧈T)) -> *)
+(*     exists t', t -->(L1) t'. *)
+(*   - intros. eapply typedterm_mutualind. admit. *)
+(* Admitted. *)
 Theorem Progress : forall t T,
     ∅ ⊢(L0) t ∈ T ->
     isvalue t \/ exists t', t -->(L0) t'.
   intros.
-  eapply LevelProgress0.
-  unfold RestrictedLevel. trivial.
-  exact H.
+  eapply LevelProgress0. eauto.
+  unfold RestrictedLevel.
+  intros.
+  exfalso.
+  eapply lookup_empty_Some. eauto.
 Qed.
 
 Ltac sub :=
