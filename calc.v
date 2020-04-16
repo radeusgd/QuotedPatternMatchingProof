@@ -442,6 +442,21 @@ Definition RestrictedLevel (G : TypEnv) (L : Level) : Prop := forall x L' T', lo
 Ltac goL0 := left; constructor; trivial.
 Ltac goL1 := right; constructor; trivial; intros.
 
+Lemma IHt0 : forall t T,
+    (L0 = L0 /\
+     (isvalue t \/ (exists t' : typedterm, t -->( L0) t')) \/
+     L0 = L1 /\
+     (~ isvalue (Quote t : ⧈ T) ->
+      exists t' : typedterm, t -->( L1) t')) ->
+    (isvalue t \/ (exists t' : typedterm, t -->( L0) t')).
+  intros.
+  destruct H; intuition.
+  congruence.
+Qed.
+
+Ltac goIHt0 t T :=
+    assert (isvalue t \/ (exists t' : typedterm, t -->( L0) t')); eapply IHt0.
+
 
 Lemma LevelProgress : forall t G T L,
     RestrictedLevel G L1 ->
@@ -465,7 +480,26 @@ Lemma LevelProgress : forall t G T L,
   - goL1.
     destruct (isvalue_decidable2 t).
     + admit.
-    + 
+    + admit.
+  - goL0.
+    admit.
+  - goL1. admit.
+  - goL0.
+    inversion H0.
+    goIHt0 t T.
+    + eapply IHt; eauto.
+    + goL0. right.
+      destruct H6. subst.
+      inversion H4; inversion H6; intuition; (try congruence).
+      * exists (Quote (Nat n : TNat) : ⧈TNat).
+        auto.
+      * subst.
+        inversion H6.
+        exists (Lift x : ⧈TNat).
+        auto.
+  - inversion H0.
+  - 
+
     (* remember (decide_isplain t) as IsPlainT. *)
     (* destruct IsPlainT. *)
     (* + assert (isplain t). *)
