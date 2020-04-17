@@ -17,7 +17,7 @@ Inductive type :=
 | TNat
 | TArr (T1 : type) (T2 : type)
 | TBox (T : type).
-Notation "'⧈' T" := (TBox T) (at level 48).
+Notation "'□' T" := (TBox T) (at level 48).
 Notation "T1 '==>' T2" := (TArr T1 T2) (at level 48).
 
 (* Inductive pattrn := *)
@@ -274,12 +274,12 @@ Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
     G ⊢(L) (App t1 t2: T2) ∈ T2
 | T_Lift : forall G t,
     G ⊢(L0) t ∈ TNat ->
-    G ⊢(L0) (Lift t : ⧈TNat) ∈ ⧈TNat
+    G ⊢(L0) (Lift t : □TNat) ∈ □TNat
 | T_Box : forall G t T,
     G ⊢(L1) t ∈ T ->
-    G ⊢(L0) (Quote t : ⧈T) ∈ ⧈T
+    G ⊢(L0) (Quote t : □T) ∈ □T
 | T_Unbox : forall G t T,
-    G ⊢(L0) t ∈ ⧈T ->
+    G ⊢(L0) t ∈ □T ->
     G ⊢(L1) (Splice t : T) ∈ T
 (* | T_Fix : TODO *)
 (* | T_Pat : TODO *)
@@ -425,9 +425,9 @@ Lemma CanonicalForms2 : forall G t T1 T2,
 Qed.
 
 Lemma CanonicalForms3 : forall G t T,
-    G ⊢(L0) t ∈ (⧈T) ->
+    G ⊢(L0) t ∈ (□T) ->
     isvalue t ->
-    exists t', isplain t' /\ t = (Quote t' : ⧈T).
+    exists t', isplain t' /\ t = (Quote t' : □T).
   intros.
   inversion H0; inversion H; subst; try congruence.
   eexists.
@@ -446,7 +446,7 @@ Corollary IHL0 : forall G t T,
   (forall G T L,
     RestrictedLevel G L1 ->
     G ⊢(L) t ∈ T ->
-    (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L = L1 /\ (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t'))) ->
+    (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L = L1 /\ (not (isvalue (Quote t : □T)) -> exists t', t -->(L1) t'))) ->
   RestrictedLevel G L1 ->
   G ⊢(L0) t ∈ T ->
   (isvalue t \/ (exists t' : typedterm, t -->( L0) t')).
@@ -454,7 +454,7 @@ Corollary IHL0 : forall G t T,
   assert (L0 = L0 /\
      (isvalue t \/ (exists t' : typedterm, t -->( L0) t')) \/
      L0 = L1 /\
-     (~ isvalue (Quote t : ⧈ T) ->
+     (~ isvalue (Quote t : □ T) ->
       exists t' : typedterm, t -->( L1) t')).
   - eapply H; eauto.
   - destruct H2; destruct H2.
@@ -466,14 +466,14 @@ Corollary IHL1 : forall G t T,
   (forall G T L,
     RestrictedLevel G L1 ->
     G ⊢(L) t ∈ T ->
-    (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L = L1 /\ (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t'))) ->
+    (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L = L1 /\ (not (isvalue (Quote t : □T)) -> exists t', t -->(L1) t'))) ->
   RestrictedLevel G L1 ->
   G ⊢(L1) t ∈ T ->
-  (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t').
+  (not (isvalue (Quote t : □T)) -> exists t', t -->(L1) t').
   intros G t T.
   intro IH.
   intros H1 H2.
-  assert ((L1 = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L1 = L1 /\ (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t'))).
+  assert ((L1 = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L1 = L1 /\ (not (isvalue (Quote t : □T)) -> exists t', t -->(L1) t'))).
   - eauto using IH.
   - destruct H; destruct H.
     + discriminate.
@@ -487,11 +487,11 @@ Qed.
 Lemma LevelProgress : forall t G T L,
     RestrictedLevel G L1 ->
     G ⊢(L) t ∈ T ->
-    (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L = L1 /\ (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t')).
+    (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L = L1 /\ (not (isvalue (Quote t : □T)) -> exists t', t -->(L1) t')).
   intro.
   induction t using syntactic; intros; destruct L; try solve [intuition].
   - goL1.
-    enough (isvalue (Quote (Nat n : T) : ⧈T0)).
+    enough (isvalue (Quote (Nat n : T) : □T0)).
     congruence.
     eauto.
   - goL0.
@@ -518,9 +518,9 @@ Lemma LevelProgress : forall t G T L,
     + inversion H1; inversion H4; intuition; try congruence.
       subst.
       inversion H4. subst.
-      exists (Quote (Nat n : TNat) : ⧈TNat). auto.
+      exists (Quote (Nat n : TNat) : □TNat). auto.
     + inversion H1.
-      exists (Lift x : ⧈TNat).
+      exists (Lift x : □TNat).
       auto.
   - inversion H0.
   - 
@@ -535,7 +535,7 @@ Lemma LevelProgress : forall t G T L,
     (*   assert (L1 = L0 /\ *)
     (*     (isvalue t \/ (exists t' : typedterm, t -->( L0) t')) \/ *)
     (*     L1 = L1 /\ *)
-    (*     (~ isvalue (Quote t : ⧈ T2) -> *)
+    (*     (~ isvalue (Quote t : □ T2) -> *)
     (*      exists t' : typedterm, t -->( L1) t')). *)
     (*   eapply IHt. *)
     (*   2: { *)
@@ -549,7 +549,7 @@ Lemma LevelProgress : forall t G T L,
     (*   * destruct H2. *)
     (*     ** destruct H2. congruence. *)
     (*     ** *)
-    (*       assert (~ isvalue (Quote t : ⧈ T2) -> *)
+    (*       assert (~ isvalue (Quote t : □ T2) -> *)
     (*               exists t' : typedterm, t -->( L1) t'). *)
     (*       intuition. *)
           
@@ -563,7 +563,7 @@ Lemma LevelProgress0 : forall G t T,
     RestrictedLevel G L1 ->
     isvalue t \/ exists t', t -->(L0) t'.
   intros.
-  enough ((L0 = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L0 = L1 /\ (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t'))).
+  enough ((L0 = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L0 = L1 /\ (not (isvalue (Quote t : □T)) -> exists t', t -->(L1) t'))).
   - destruct H1; intuition.
     + congruence.
   - eapply LevelProgress; eauto.
@@ -571,7 +571,7 @@ Qed.
 (* with LevelProgress1 : forall G t T, *)
 (*     RestrictedLevel G L1 -> *)
 (*     G ⊢(L1) t ∈ T -> *)
-(*     not (isvalue (Quote t : ⧈T)) -> *)
+(*     not (isvalue (Quote t : □T)) -> *)
 (*     exists t', t -->(L1) t'. *)
 (*   - intros. eapply typedterm_mutualind. admit. *)
 (* Admitted. *)
