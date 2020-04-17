@@ -287,6 +287,21 @@ where "G '⊢(' L ')' t '∈' T" := (typing_judgement G L t T).
 Hint Constructors typing_judgement.
 
 (* SEMANTICS *)
+
+Fixpoint decide_isplain (t : typedterm) : bool :=
+  match t with
+  | TypedTerm t' _ =>
+    match t' with
+    | Nat _ => true
+    | VAR _ => true
+    | Lam _ ebody => decide_isplain ebody
+    | App e1 e2 => (decide_isplain e1) && (decide_isplain e2)
+    | _ => false
+    end
+  end.
+
+Definition isplain t := (decide_isplain t) = true.
+
 Reserved Notation "t1 '-->(' L ')' t2" (at level 48).
 Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 | E_App1 : forall L t1 t2 t1' T, t1 -->(L) t1' -> (App t1 t2 : T) -->(L) (App t1' t2 : T)
@@ -300,6 +315,8 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 | E_Unbox : forall t t' T,
     t -->(L0) t' ->
     (Splice t : T) -->(L1) (Splice t' : T)
+| E_Splice : forall t T,
+    isplain t -> (Splice (Quote t : □T) : T) -->(L1) t
 | E_Lift_Red : forall n TN T,
     (Lift (Nat n : TN) : T) -->(L0) (Quote (Nat n : TN) : T)
 | E_Lift : forall t t' T,
@@ -315,20 +332,6 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 where "t1 '-->(' L ')' t2" := (reducts L t1 t2).
 Hint Constructors reducts.
 
-(* PROPERTIES *)
-Fixpoint decide_isplain (t : typedterm) : bool :=
-  match t with
-  | TypedTerm t' _ =>
-    match t' with
-    | Nat _ => true
-    | VAR _ => true
-    | Lam _ ebody => decide_isplain ebody
-    | App e1 e2 => (decide_isplain e1) && (decide_isplain e2)
-    | _ => false
-    end
-  end.
-
-Definition isplain t := (decide_isplain t) = true.
 
 Fixpoint decide_isvalue (t : typedterm) : bool :=
   match t with
@@ -487,8 +490,14 @@ Lemma LevelProgress : forall t G T L,
       exists (Quote x : □ T1). eauto.
       unfold isvalue. congruence.
   - (* Splice L1 *)
-    admit.
-
+    inversion H0. subst.
+    eapply IHL0 in IHt; eauto.
+    destruct IHt.
+    + eapply CanonicalForms3 in H2; eauto.
+      inversion H2.
+      destruct H3. subst.
+      eexists. eauto.
+    + inversion H2. eexists. eauto.
 Admitted.
 
 Lemma LevelProgress0 : forall G t T,
@@ -612,5 +621,6 @@ Theorem Preservation : forall t1 T G L,
   - inversion H0; subst. eapply T_Box.
     apply IHtyping_judgement. easy.
   - inversion H0; subst.
-    apply T_Unbox. apply IHtyping_judgement. trivial.
-Qed.
+    + apply T_Unbox. apply IHtyping_judgement. trivial.
+    + admit.
+Admitted.
