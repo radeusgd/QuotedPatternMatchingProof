@@ -442,20 +442,46 @@ Definition RestrictedLevel (G : TypEnv) (L : Level) : Prop := forall x L' T', lo
 Ltac goL0 := left; constructor; trivial.
 Ltac goL1 := right; constructor; trivial; intros.
 
-Lemma IHt0 : forall t T,
-    (L0 = L0 /\
+Corollary IHL0 : forall G t T,
+  (forall G T L,
+    RestrictedLevel G L1 ->
+    G ⊢(L) t ∈ T ->
+    (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L = L1 /\ (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t'))) ->
+  RestrictedLevel G L1 ->
+  G ⊢(L0) t ∈ T ->
+  (isvalue t \/ (exists t' : typedterm, t -->( L0) t')).
+  intros.
+  assert (L0 = L0 /\
      (isvalue t \/ (exists t' : typedterm, t -->( L0) t')) \/
      L0 = L1 /\
      (~ isvalue (Quote t : ⧈ T) ->
-      exists t' : typedterm, t -->( L1) t')) ->
-    (isvalue t \/ (exists t' : typedterm, t -->( L0) t')).
-  intros.
-  destruct H; intuition.
-  congruence.
+      exists t' : typedterm, t -->( L1) t')).
+  - eapply H; eauto.
+  - destruct H2; destruct H2.
+    + trivial.
+    + discriminate.
 Qed.
 
-Ltac goIHt0 t T :=
-    assert (isvalue t \/ (exists t' : typedterm, t -->( L0) t')); eapply IHt0.
+Corollary IHL1 : forall G t T,
+  (forall G T L,
+    RestrictedLevel G L1 ->
+    G ⊢(L) t ∈ T ->
+    (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L = L1 /\ (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t'))) ->
+  RestrictedLevel G L1 ->
+  G ⊢(L1) t ∈ T ->
+  (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t').
+  intros G t T.
+  intro IH.
+  intros H1 H2.
+  assert ((L1 = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L1 = L1 /\ (not (isvalue (Quote t : ⧈T)) -> exists t', t -->(L1) t'))).
+  - eauto using IH.
+  - destruct H; destruct H.
+    + discriminate.
+    + trivial.
+Qed.
+
+(* Ltac goIHt0 t T := *)
+(*     assert (isvalue t \/ (exists t' : typedterm, t -->( L0) t')); eapply InductiveHypL0. *)
 
 
 Lemma LevelProgress : forall t G T L,
@@ -486,17 +512,16 @@ Lemma LevelProgress : forall t G T L,
   - goL1. admit.
   - goL0.
     inversion H0.
-    goIHt0 t T.
-    + eapply IHt; eauto.
-    + goL0. right.
-      destruct H6. subst.
-      inversion H4; inversion H6; intuition; (try congruence).
-      * exists (Quote (Nat n : TNat) : ⧈TNat).
-        auto.
-      * subst.
-        inversion H6.
-        exists (Lift x : ⧈TNat).
-        auto.
+    eapply IHL0 in IHt; eauto. subst.
+    right.
+    destruct IHt.
+    + inversion H1; inversion H4; intuition; try congruence.
+      subst.
+      inversion H4. subst.
+      exists (Quote (Nat n : TNat) : ⧈TNat). auto.
+    + inversion H1.
+      exists (Lift x : ⧈TNat).
+      auto.
   - inversion H0.
   - 
 
