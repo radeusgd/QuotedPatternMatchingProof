@@ -302,6 +302,19 @@ Fixpoint decide_isplain (t : typedterm) : bool :=
 
 Definition isplain t := (decide_isplain t) = true.
 
+Fixpoint decide_isvalue (t : typedterm) : bool :=
+  match t with
+  | TypedTerm t' _ =>
+    match t' with
+    | Nat _ => true
+    | Lam _ ebody => true
+    | Quote t => decide_isplain t
+    | _ => false
+    end
+  end.
+
+Definition isvalue t := (decide_isvalue t) = true.
+
 Reserved Notation "t1 '-->(' L ')' t2" (at level 48).
 Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 | E_App1 : forall L t1 t2 t1' T, t1 -->(L) t1' -> (App t1 t2 : T) -->(L) (App t1' t2 : T)
@@ -323,6 +336,7 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
     t -->(L0) t' ->
     (Lift t : T) -->(L0) (Lift t' : T)
 | E_Beta : forall t T1 T2 v,
+    isvalue v ->
     (App (Lam T1 t : (T1 ==> T2)) v : T2) -->(L0) t.[v/]
 (* | E_Fix : TODO *)
 (* | E_Fix_Red : TODO *)
@@ -332,23 +346,10 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 where "t1 '-->(' L ')' t2" := (reducts L t1 t2).
 Hint Constructors reducts.
 
-
-Fixpoint decide_isvalue (t : typedterm) : bool :=
-  match t with
-  | TypedTerm t' _ =>
-    match t' with
-    | Nat _ => true
-    | Lam _ ebody => true
-    | Quote t => decide_isplain t
-    | _ => false
-    end
-  end.
-
-Definition isvalue t := (decide_isvalue t) = true.
-
 Definition id_nat := (Lam TNat (VAR 0 : TNat) : TNat ==> TNat).
 Lemma test_red : (App id_nat (Nat 42 : TNat) : TNat) -->(L0) (Nat 42 : TNat).
   apply E_Beta.
+  cbv. auto.
 Qed.
 
 Lemma CanonicalForms1 : forall G t,
@@ -465,7 +466,15 @@ Lemma LevelProgress : forall t G T L,
       auto.
     + eauto using AddingRestrictedDoesNotRemoveRestriction.
   - (* App L0 *)
-    admit.
+    right.
+    inversion H0; subst.
+    eapply IHL0 in IHt1; eauto.
+    eapply IHL0 in IHt2; eauto.
+    destruct IHt1.
+    + destruct IHt2.
+      * admit.
+      * inversion H2. eexists; eauto.
+    + inversion H1. eexists; eauto.
   - (* App L1 *)
     admit.
   - (* Lift L0 *)
@@ -622,5 +631,5 @@ Theorem Preservation : forall t1 T G L,
     apply IHtyping_judgement. easy.
   - inversion H0; subst.
     + apply T_Unbox. apply IHtyping_judgement. trivial.
-    + admit.
-Admitted.
+    + inversion H; subst. auto.
+Qed.
