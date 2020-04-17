@@ -472,11 +472,22 @@ Lemma LevelProgress : forall t G T L,
     eapply IHL0 in IHt2; eauto.
     destruct IHt1.
     + destruct IHt2.
-      * admit.
+      * eapply CanonicalForms2 in H1; eauto.
+        inversion H1. subst. eexists. eauto.
       * inversion H2. eexists; eauto.
     + inversion H1. eexists; eauto.
   - (* App L1 *)
-    admit.
+    assert (decide_isvalue (Quote (App t1 t2 : T) : □ T0) = false) as Hv.
+    auto using Bool.not_true_is_false.
+    cbn in Hv. apply Bool.andb_false_iff in Hv.
+    inversion H0; subst.
+    destruct Hv.
+    + eapply IHL1 in IHt1; eauto.
+      * inversion IHt1. eexists. eauto.
+      * unfold isvalue. cbn. congruence.
+    + eapply IHL1 in IHt2; eauto.
+      * inversion IHt2. eexists; eauto.
+      * unfold isvalue. cbn. congruence.
   - (* Lift L0 *)
     inversion H0.
     eapply IHL0 in IHt; eauto. subst.
@@ -507,7 +518,7 @@ Lemma LevelProgress : forall t G T L,
       destruct H3. subst.
       eexists. eauto.
     + inversion H2. eexists. eauto.
-Admitted.
+Qed.
 
 Lemma LevelProgress0 : forall G t T,
     G ⊢(L0) t ∈ T ->
@@ -524,8 +535,7 @@ Qed.
 (*     G ⊢(L1) t ∈ T -> *)
 (*     not (isvalue (Quote t : □T)) -> *)
 (*     exists t', t -->(L1) t'. *)
-(*   - intros. eapply typedterm_mutualind. admit. *)
-(* Admitted. *)
+
 Theorem Progress : forall t T,
     ∅ ⊢(L0) t ∈ T ->
     isvalue t \/ exists t', t -->(L0) t'.
