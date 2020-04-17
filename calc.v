@@ -316,19 +316,6 @@ where "t1 '-->(' L ')' t2" := (reducts L t1 t2).
 Hint Constructors reducts.
 
 (* PROPERTIES *)
-(* Inductive isplain : typedterm -> Prop := *)
-(* | Plain_tt : forall t T, isplaint t -> isplain (t : T) *)
-(* with *)
-(* isplaint : term -> Prop := *)
-(* | Plain_nat : forall n, isplaint (Nat n) *)
-(* | Plain_var : forall x, isplaint (VAR x) *)
-(* | Plain_lam : forall T t, isplain t -> isplaint (Lam T t) *)
-(* | Plain_app : forall t1 t2, isplain t1 -> isplain t2 -> isplaint (App t1 t2) *)
-(* (* | Plain_fix : TODO *) *)
-(* . *)
-(* Hint Constructors isplain. *)
-(* Hint Constructors isplaint. *)
-
 Fixpoint decide_isplain (t : typedterm) : bool :=
   match t with
   | TypedTerm t' _ =>
@@ -341,56 +328,7 @@ Fixpoint decide_isplain (t : typedterm) : bool :=
     end
   end.
 
-Hint Immediate Bool.andb_true_iff.
-
-(* Lemma isplain_decidable (t : typedterm) : *)
-(*   decide_isplain t = true <-> isplain t. *)
-(*   induction t using syntactic; intuition; eauto; try solve [inversion H0 | inversion H1; inversion H3]. *)
-(*   - cbn. inversion H1. inversion H3. subst. auto. *)
-(*   - inversion H3. *)
-(*     apply Bool.andb_true_iff in H5. *)
-(*     intuition. *)
-(*   - cbn. inversion H3. inversion H5. subst. intuition. *)
-(* Qed. *)
-
-(* Lemma isplain_decidable2 (t : typedterm) : *)
-(*   {isplain t} + {~ isplain t}. *)
-(*   remember (decide_isplain t) as ipt. *)
-(*   destruct ipt. *)
-(*   left. *)
-(*   apply isplain_decidable. auto. *)
-(*   right. intro. *)
-(*   apply isplain_decidable in H. congruence. *)
-(* Qed. *)
-
-(* Lemma isplain_decidable3 (t : typedterm) : *)
-(*   decide_isplain t = false <-> ~ (isplain t). *)
-(*   intuition. *)
-(*   - inversion H0; inversion H1; subst; cbn in *; try congruence. *)
-(*     + assert (decide_isplain t1 = true). *)
-(*       apply isplain_decidable. auto. *)
-(*       congruence. *)
-(*     + apply Bool.andb_false_iff in H. *)
-(*       destruct H. *)
-(*       * assert (decide_isplain t1 = true). *)
-(*         apply (isplain_decidable). auto. *)
-(*         congruence. *)
-(*       * assert (decide_isplain t2 = true). *)
-(*         apply (isplain_decidable). auto. *)
-(*         congruence. *)
-(*   - exfalso. *)
-(*     apply H. *)
-      
-(* Admitted. *)
-
 Definition isplain t := (decide_isplain t) = true.
-
-(* Inductive isvalue : typedterm -> Prop := *)
-(* | Val_Nat : forall n T, isvalue (Nat n : T) *)
-(* | Val_Lam : forall t T1 T, isvalue (Lam T1 t : T) *)
-(* | Val_Box : forall t T, isplain t -> isvalue (Quote t : T) *)
-(* . *)
-(* Hint Constructors isvalue. *)
 
 Fixpoint decide_isvalue (t : typedterm) : bool :=
   match t with
@@ -402,37 +340,6 @@ Fixpoint decide_isvalue (t : typedterm) : bool :=
     | _ => false
     end
   end.
-
-(* Lemma isvalue_decidable (t : typedterm) : isvalue t <-> decide_isvalue t = true. *)
-(*   induction t using syntactic; intuition; try (inversion H); try inversion H1. *)
-(*   - inversion H3. *)
-(*   - cbv in H3. congruence. *)
-(*   - subst. cbn. *)
-(*     apply isplain_decidable. auto. *)
-(*   - constructor. apply isplain_decidable. auto. *)
-(* Qed. *)
-
-(* Lemma isvalue_decidable3 (t : typedterm) : (~ (isvalue t)) <-> decide_isvalue t = false. *)
-(*   induction t using syntactic; intuition. *)
-(*   - exfalso; apply H; eauto. *)
-(*   - inversion H0. *)
-(*   - exfalso. *)
-(*     apply H1. *)
-(*     auto. *)
-(*   - inversion H4. *)
-(*   - inversion H2. *)
-(*   - cbn. *)
-(* Admitted. *)
-
-(* Lemma isvalue_decidable2 (t : typedterm) : {isvalue t} + {~ isvalue t}. *)
-(*   remember (decide_isvalue t) as ivt. *)
-(*   destruct ivt. *)
-(*   left. *)
-(*   apply isvalue_decidable. auto. *)
-(*   right. *)
-(*   intro. *)
-(*   apply isvalue_decidable in H. congruence. *)
-(* Qed. *)
 
 Definition isvalue t := (decide_isvalue t) = true.
 
@@ -531,120 +438,86 @@ Lemma AddingRestrictedDoesNotRemoveRestriction : forall G L T,
   eauto using H.
 Qed.
 
-(* Lemma LevelProgress : forall t G T L, *)
+Ltac autoselectL0L1Case := (match goal with
+               | |- context[L0 = L0] => goL0
+               | |- context[L1 = L1] => goL1
+               end).
+
+Lemma LevelProgress : forall t G T L,
+    RestrictedLevel G L1 ->
+    G ⊢(L) t ∈ T ->
+    (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L = L1 /\ (not (isvalue (Quote t : □T)) -> exists t', t -->(L1) t')).
+  intro.
+  induction t using syntactic; intros; destruct L; autoselectL0L1Case; unfold isvalue in *; try solve [cbn; intuition | inversion H0].
+  - (* VAR L0 *)
+    exfalso.
+    unfold RestrictedLevel in H.
+    inversion H0. subst.
+    apply H in H6. congruence.
+  - (* Lam L1 *)
+    inversion H0; subst.
+    eapply IHL1 in IHt; eauto.
+    + inversion IHt.
+      exists (Lam argT x : argT ==> T2).
+      auto.
+    + eauto using AddingRestrictedDoesNotRemoveRestriction.
+  - (* App L0 *)
+    admit.
+  - (* App L1 *)
+    admit.
+  - (* Lift L0 *)
+    inversion H0.
+    eapply IHL0 in IHt; eauto. subst.
+    right.
+    destruct IHt.
+    + inversion H4; intuition; cbv in H1; subst; try congruence.
+      inversion H4. subst.
+      exists (Quote (Nat n : TNat) : □TNat).
+      eauto.
+    + inversion H1.
+      exists (Lift x : □TNat).
+      auto.
+  - (* Quote L0 *)
+    remember (decide_isvalue (Quote t : T)) as QtV.
+    destruct QtV.
+    + left. trivial.
+    + right. inversion H0; subst.
+      eapply IHL1 in IHt; eauto.
+      inversion IHt.
+      exists (Quote x : □ T1). eauto.
+      unfold isvalue. congruence.
+  - (* Splice L1 *)
+    admit.
+
+Admitted.
+
+Lemma LevelProgress0 : forall G t T,
+    G ⊢(L0) t ∈ T ->
+    RestrictedLevel G L1 ->
+    isvalue t \/ exists t', t -->(L0) t'.
+  intros.
+  enough ((L0 = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L0 = L1 /\ (not (isvalue (Quote t : □T)) -> exists t', t -->(L1) t'))).
+  - destruct H1; intuition.
+    + congruence.
+  - eapply LevelProgress; eauto.
+Qed.
+(* with LevelProgress1 : forall G t T, *)
 (*     RestrictedLevel G L1 -> *)
-(*     G ⊢(L) t ∈ T -> *)
-(*     (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L = L1 /\ (not (isvalue (Quote t : □T)) -> exists t', t -->(L1) t')). *)
-(*   intro. *)
-(*   induction t using syntactic; intros; destruct L; try solve [intuition]. *)
-(*   - goL1. *)
-(*     enough (isvalue (Quote (Nat n : T) : □T0)). *)
-(*     congruence. *)
-(*     eauto. *)
-(*   - goL0. *)
-(*     exfalso. *)
-(*     unfold RestrictedLevel in H. *)
-(*     inversion H0. subst. *)
-(*     apply H in H6. congruence. *)
-(*   - goL1. *)
-(*     exfalso. *)
-(*     apply H1. *)
-(*     eauto. *)
-(*   - goL1. *)
-(*     inversion H0; subst. *)
-(*     eapply IHL1 in IHt; eauto. *)
-(*     + inversion IHt. *)
-(*       exists (Lam argT x : argT ==> T2). *)
-(*       auto. *)
-(*     + eauto using AddingRestrictedDoesNotRemoveRestriction. *)
-(*     +  *)
-
-
-(*   - goL0. *)
-(*     admit. *)
-(*   - goL1. admit. *)
-(*   - goL0. *)
-(*     inversion H0. *)
-(*     eapply IHL0 in IHt; eauto. subst. *)
-(*     right. *)
-(*     destruct IHt. *)
-(*     + inversion H1; inversion H4; intuition; try congruence. *)
-(*       subst. *)
-(*       inversion H4. subst. *)
-(*       exists (Quote (Nat n : TNat) : □TNat). auto. *)
-(*     + inversion H1. *)
-(*       exists (Lift x : □TNat). *)
-(*       auto. *)
-(*   - inversion H0. *)
-(*   - goL0. *)
-(*     destruct (isvalue_decidable2 (Quote t : T)). *)
-(*     + left. trivial. *)
-(*     + right. inversion H0; subst. *)
-(*       eapply IHL1 in IHt; eauto. *)
-(*       inversion IHt. *)
-(*       exists (Quote x : □ T1). eauto. *)
-(*   -  *)
-
-(*     (* remember (decide_isplain t) as IsPlainT. *) *)
-(*     (* destruct IsPlainT. *) *)
-(*     (* + assert (isplain t). *) *)
-(*     (*   unfold isplain. auto. *) *)
-(*     (*   exfalso. apply H1. auto. *) *)
-(*     (* + *) *)
-(*     (*   inversion H0; subst. *) *)
-(*     (*   assert (L1 = L0 /\ *) *)
-(*     (*     (isvalue t \/ (exists t' : typedterm, t -->( L0) t')) \/ *) *)
-(*     (*     L1 = L1 /\ *) *)
-(*     (*     (~ isvalue (Quote t : □ T2) -> *) *)
-(*     (*      exists t' : typedterm, t -->( L1) t')). *) *)
-(*     (*   eapply IHt. *) *)
-(*     (*   2: { *) *)
-(*     (*     eauto. *) *)
-(*     (*   } *) *)
-(*     (*   * unfold RestrictedLevel. *) *)
-(*     (*     intros. *) *)
-(*     (*     destruct x. *) *)
-(*     (*     lookup_insert_all. auto. *) *)
-(*     (*     lookup_insert_all. eapply H. eauto. *) *)
-(*     (*   * destruct H2. *) *)
-(*     (*     ** destruct H2. congruence. *) *)
-(*     (*     ** *) *)
-(*     (*       assert (~ isvalue (Quote t : □ T2) -> *) *)
-(*     (*               exists t' : typedterm, t -->( L1) t'). *) *)
-(*     (*       intuition. *) *)
-          
-
-    
-
+(*     G ⊢(L1) t ∈ T -> *)
+(*     not (isvalue (Quote t : □T)) -> *)
+(*     exists t', t -->(L1) t'. *)
+(*   - intros. eapply typedterm_mutualind. admit. *)
 (* Admitted. *)
-
-(* Lemma LevelProgress0 : forall G t T, *)
-(*     G ⊢(L0) t ∈ T -> *)
-(*     RestrictedLevel G L1 -> *)
-(*     isvalue t \/ exists t', t -->(L0) t'. *)
-(*   intros. *)
-(*   enough ((L0 = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) \/ (L0 = L1 /\ (not (isvalue (Quote t : □T)) -> exists t', t -->(L1) t'))). *)
-(*   - destruct H1; intuition. *)
-(*     + congruence. *)
-(*   - eapply LevelProgress; eauto. *)
-(* Qed. *)
-(* (* with LevelProgress1 : forall G t T, *) *)
-(* (*     RestrictedLevel G L1 -> *) *)
-(* (*     G ⊢(L1) t ∈ T -> *) *)
-(* (*     not (isvalue (Quote t : □T)) -> *) *)
-(* (*     exists t', t -->(L1) t'. *) *)
-(* (*   - intros. eapply typedterm_mutualind. admit. *) *)
-(* (* Admitted. *) *)
-(* Theorem Progress : forall t T, *)
-(*     ∅ ⊢(L0) t ∈ T -> *)
-(*     isvalue t \/ exists t', t -->(L0) t'. *)
-(*   intros. *)
-(*   eapply LevelProgress0. eauto. *)
-(*   unfold RestrictedLevel. *)
-(*   intros. *)
-(*   exfalso. *)
-(*   eapply lookup_empty_Some. eauto. *)
-(* Qed. *)
+Theorem Progress : forall t T,
+    ∅ ⊢(L0) t ∈ T ->
+    isvalue t \/ exists t', t -->(L0) t'.
+  intros.
+  eapply LevelProgress0. eauto.
+  unfold RestrictedLevel.
+  intros.
+  exfalso.
+  eapply lookup_empty_Some. eauto.
+Qed.
 
 Ltac sub :=
   (* unfold substitute; *)
