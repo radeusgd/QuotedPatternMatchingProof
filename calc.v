@@ -20,13 +20,14 @@ Inductive type :=
 Notation "'□' T" := (TBox T) (at level 48).
 Notation "T1 '==>' T2" := (TArr T1 T2) (at level 48).
 
-(* Inductive pattrn := *)
-(* | PNatLit (n : nat) *)
-(* | PBindVar (T : type) *)
-(* | PBindApp (T1 T2 : type) *)
-(* | PBindUnlift *)
-(* | PBindLam (T : type) *)
-(* . *)
+Inductive pattrn :=
+| PNatLit (n : nat)
+| PVar (x : DeBruijnIndex)
+(* | PBindVar (T : type) - we exclude this pattern as it is useless in non-nested pattern matching *)
+| PBindApp (T1 T2 : type)
+| PBindUnlift
+| PBindLam (T : type)
+.
 
 Inductive typedterm :=
 | TypedTerm (u: term) (t: type)
@@ -38,7 +39,7 @@ with term :=
      | Lift (e: typedterm)
      | Quote (e : typedterm)
      | Splice (e : typedterm)
-(* | PatternMatch (e : typedterm) (pat : pattrn) (success failure : typedterm) *)
+     | PatternMatch (e : typedterm) (pat : pattrn) (success failure : typedterm)
 .
 Notation "u ':' T" := (TypedTerm u T) (at level 49).
 Scheme typedterm_mutualind := Induction for typedterm Sort Prop
@@ -61,12 +62,12 @@ Lemma syntactic :
         P e -> forall T : type, P (Quote e : T)) ->
     (forall e : typedterm,
         P e -> forall T : type, P (Splice e : T)) ->
+    (forall (e s f : typedterm) (p : pattrn), P e -> P s -> P f -> forall T : type, P (PatternMatch e p s f : T)) ->
     forall t : typedterm, P t
 .
   intros.
   eapply typedterm_mutualind.
-  - intro. intro.
-    exact H6.
+  - intro. intro. exact H7.
   - auto.
   - auto.
   - auto.
@@ -74,6 +75,8 @@ Lemma syntactic :
   - auto.
   - auto.
   - auto.
+  - intros.
+    intro. auto.
 Qed.
 
 (* Definition RemoveType (tt : typedterm) : term := match tt with *)
@@ -85,13 +88,14 @@ Instance var_term : Var term := {
                                  var := VAR
                                }.
 
-(* Definition pattern_binders_count (pat : pattrn) : nat := *)
-(*   match pat with *)
-(*   | PNatLit _ => 0 *)
-(*   | PBindVar _ => 1 *)
-(*   | PBindApp _ _ => 2 *)
-(*   | PBindLam _ => 1 *)
-(*   end. *)
+Definition pattern_binders_count (pat : pattrn) : nat :=
+  match pat with
+  | PNatLit _ => 0
+  | PVar _ => 0
+  | PBindApp _ _ => 2
+  | PBindUnlift => 1
+  | PBindLam _ => 1
+  end.
 
 Fixpoint traverse_typedterm (f : nat -> nat -> term) l t :=
   match t with
@@ -106,8 +110,8 @@ with traverse_term f l u :=
        | Lift e => Lift (traverse_typedterm f l e)
        | Quote e => Quote (traverse_typedterm f l e)
        | Splice e => Splice (traverse_typedterm f l e)
-                     (* | PatternMatch e pat success failure => *)
-                     (*   PatternMatch (traverse_typedterm f l e) pat (traverse_typedterm f (pattern_binders_count pat + l) success) (traverse_typedterm f l failure) *)
+       | PatternMatch e pat success failure =>
+         PatternMatch (traverse_typedterm f l e) pat (traverse_typedterm f (pattern_binders_count pat + l) success) (traverse_typedterm f l failure)
        end.
 
 Compute (Nat 0 : TNat).
@@ -259,6 +263,23 @@ Notation "∅" := emptyEnv.
 (* Definition env_has (G : TypEnv) (x : DeBruijnIndex) (L : Level) (T : type) : Prop := *)
   (* lookup x G = Some (L, T). *)
 
+Reserved Notation "G '⊢p' p '∈' T '~~>' Gp" (at level 40, T at level 59).
+Inductive pattern_typing : TypEnv -> pattrn -> type -> list (Level * type) -> Prop :=
+| T_Pat_Nat : forall G n,
+    G ⊢p (PNatLit n) ∈ TNat ~~> nil
+| T_Pat_Var : forall G x T,
+    lookup x G = Some (L1, T) ->
+    G ⊢p (PVar x) ∈ T ~~> nil
+(* T_Pat_Fix : TODO *)
+| T_Pat_App : forall G T1 T2,
+    G ⊢p (PBindApp T1 T2) ∈ T2 ~~>
+      cons (L1, T1 ==> T2) (cons (L1, T2) nil)
+| T_Pat_Unlift : forall G,
+    G ⊢p (PBindUnlift) ∈ TNat ~~> cons (L1, TNat) nil
+| T_Pat_Abs : forall G T1 T2,
+    G ⊢p (PBindLam (T1 ==> T2)) ∈ (T1 ==> T2) ~~> cons (L1, ((□T1) ==> (□T2))) nil
+where "G '⊢p' p '∈' T '~~>' Gp" := (pattern_typing G p T Gp).
+
 Reserved Notation "G '⊢(' L ')' t '∈' T" (at level 40, t at level 59, T at level 59).
 Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
 | T_Nat : forall L G n, G ⊢(L) (Nat n : TNat) ∈ TNat
@@ -282,7 +303,12 @@ Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
     G ⊢(L0) t ∈ □T ->
     G ⊢(L1) (Splice t : T) ∈ T
 (* | T_Fix : TODO *)
-(* | T_Pat : TODO *)
+| T_Pat : forall G t1 ts tf T1 T p Gp,
+    G ⊢(L0) t1 ∈ □T1 ->
+    G ⊢p p ∈ T1 ~~> Gp ->
+    (concat G Gp) ⊢(L0) ts ∈ T ->
+    G ⊢(L0) tf ∈ T ->
+    G ⊢(L0) (PatternMatch t1 p ts tf : T) ∈ T
 where "G '⊢(' L ')' t '∈' T" := (typing_judgement G L t T).
 Hint Constructors typing_judgement.
 
@@ -315,6 +341,9 @@ Fixpoint decide_isvalue (t : typedterm) : bool :=
 
 Definition isvalue t := (decide_isvalue t) = true.
 
+Definition Match (t : typedterm) (p : pattrn) : option (typedterm -> typedterm) :=
+  None. (* TODO *)
+
 Reserved Notation "t1 '-->(' L ')' t2" (at level 48).
 Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 | E_App1 : forall L t1 t2 t1' T, t1 -->(L) t1' -> (App t1 t2 : T) -->(L) (App t1' t2 : T)
@@ -340,9 +369,14 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
     (App (Lam T1 t : (T1 ==> T2)) v : T2) -->(L0) t.[v/]
 (* | E_Fix : TODO *)
 (* | E_Fix_Red : TODO *)
-(* | E_Pat : TODO *)
+| E_Pat : forall T t1 p s f t1',
+    t1 -->(L0) t1' ->
+    (PatternMatch t1 p s f : T) -->(L0) (PatternMatch t1' p s f : T)
 (* | E_Pat_Succ : TODO *)
-(* | E_Pat_Fail : TODO *)
+| E_Pat_Fail : forall t Ts T p s f,
+    isplain t ->
+    Match t p = None ->
+    (PatternMatch (Quote t : □Ts) p s f : T) -->(L0) f
 where "t1 '-->(' L ')' t2" := (reducts L t1 t2).
 Hint Constructors reducts.
 
@@ -383,6 +417,13 @@ Lemma CanonicalForms3 : forall G t T,
     eauto.
   }
   cbn in H2. auto.
+Qed.
+
+Corollary PatternBindArityCorrect : forall G p T Gp,
+    G ⊢p p ∈ T ~~> Gp ->
+    pattern_binders_count p = length Gp.
+  intros.
+  inversion H; auto.
 Qed.
 
 Definition RestrictedLevel (G : TypEnv) (L : Level) : Prop := forall x L' T', lookup x G = Some (L', T') -> L' = L.
