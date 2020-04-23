@@ -1,6 +1,7 @@
 Set Implicit Arguments.
 Require Import Dblib.DblibTactics.
 Require Import Dblib.DeBruijn.
+Require Import Coq.Bool.Bool.
 
 Definition dec (x y : nat) : x = y \/ x <> y.
   remember (x =? y).
@@ -19,6 +20,7 @@ Inductive type :=
 | TBox (T : type).
 Notation "'□' T" := (TBox T) (at level 48).
 Notation "T1 '==>' T2" := (TArr T1 T2) (at level 48).
+Scheme Equality for type.
 
 Inductive pattrn :=
 | PNatLit (n : nat)
@@ -273,12 +275,13 @@ Inductive pattern_typing : TypEnv -> pattrn -> type -> list (Level * type) -> Pr
 (* T_Pat_Fix : TODO *)
 | T_Pat_App : forall G T1 T2,
     G ⊢p (PBindApp T1 T2) ∈ T2 ~~>
-      cons (L1, T1 ==> T2) (cons (L1, T2) nil)
+      cons (L0, T1 ==> T2) (cons (L0, T2) nil)
 | T_Pat_Unlift : forall G,
-    G ⊢p (PBindUnlift) ∈ TNat ~~> cons (L1, TNat) nil
+    G ⊢p (PBindUnlift) ∈ TNat ~~> cons (L0, TNat) nil
 | T_Pat_Abs : forall G T1 T2,
-    G ⊢p (PBindLam (T1 ==> T2)) ∈ (T1 ==> T2) ~~> cons (L1, ((□T1) ==> (□T2))) nil
+    G ⊢p (PBindLam (T1 ==> T2)) ∈ (T1 ==> T2) ~~> cons (L0, ((□T1) ==> (□T2))) nil
 where "G '⊢p' p '∈' T '~~>' Gp" := (pattern_typing G p T Gp).
+Hint Constructors pattern_typing.
 
 Reserved Notation "G '⊢(' L ')' t '∈' T" (at level 40, t at level 59, T at level 59).
 Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
@@ -312,6 +315,11 @@ Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
 where "G '⊢(' L ')' t '∈' T" := (typing_judgement G L t T).
 Hint Constructors typing_judgement.
 
+Definition id_nat := (Lam TNat (VAR 0 : TNat) : TNat ==> TNat).
+Lemma TypingIdTest : ∅ ⊢(L0) (Lam TNat (VAR 0 : TNat) : TNat ==> TNat) ∈ TNat ==> TNat.
+  auto.
+Qed.
+
 (* SEMANTICS *)
 
 Fixpoint decide_isplain (t : typedterm) : bool :=
@@ -341,8 +349,42 @@ Fixpoint decide_isvalue (t : typedterm) : bool :=
 
 Definition isvalue t := (decide_isvalue t) = true.
 
+Definition LiftLambda (argT : type) (body : typedterm) (retT : type) :=
+  let body' := shift 1 body in (* we need to shift to preserve original variable mapping after we do the subst that replaces x1 with $x3 *)
+  let z := Quote (body'.[Splice (VAR 0 : □argT) : argT/]) in
+  (Lam (□argT) (z : □retT) : ((□argT) ==> (□retT)))
+.
+
+Lemma LiftLambdaTest : (LiftLambda TNat (App (VAR 1 : TNat ==> TNat) (VAR 0 : TNat) : TNat) TNat) = (Lam (□TNat) (Quote (App (VAR 1 : TNat ==> TNat) (Splice (VAR 0 : □TNat) : TNat) : TNat) : □TNat) : □TNat ==> □TNat).
+  auto.
+Qed.
+
+
+(* I don't check if the term is plain, I just assume it in the reduction rule before using Match *)
 Definition Match (t : typedterm) (p : pattrn) : option (typedterm -> typedterm) :=
-  None. (* TODO *)
+  match (t, p) with
+  | (Nat n : TNat, PNatLit n') =>
+    if Nat.eq_dec n n' then
+      Some (fun t => t)
+    else None
+  | (VAR x : T,  PVar x') =>
+    if Nat.eq_dec x x' then
+      Some (fun t => t)
+    else None
+(* TODO  fixpoint *)
+  | (App (e1 : T1) (e2 : T2) : T,  PBindApp T1' T2') =>
+    if (type_beq T1 T1') && (type_beq T2 T2') then
+      Some (fun t => t.[e1 : T1/].[e2 : T2/])
+    else None
+  | (Nat n : TNat, PBindUnlift) =>
+    Some (fun t => t.[Nat n : TNat/])
+  | (Lam argT body : T1 ==> T2, PBindLam T) =>
+    if type_beq (T1 ==> T2) T && type_beq argT T1 then
+      let lifted := LiftLambda argT body T2 in
+      Some (fun t => t.[lifted/])
+    else None
+  | _ => None
+  end.
 
 Reserved Notation "t1 '-->(' L ')' t2" (at level 48).
 Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
@@ -364,15 +406,20 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 | E_Lift : forall t t' T,
     t -->(L0) t' ->
     (Lift t : T) -->(L0) (Lift t' : T)
-| E_Beta : forall t T1 T2 v,
+| E_Beta : forall t T1 T2 v t',
     isvalue v ->
-    (App (Lam T1 t : (T1 ==> T2)) v : T2) -->(L0) t.[v/]
+    t' = t.[v/] ->
+    (App (Lam T1 t : (T1 ==> T2)) v : T2) -->(L0) t'
 (* | E_Fix : TODO *)
 (* | E_Fix_Red : TODO *)
 | E_Pat : forall T t1 p s f t1',
     t1 -->(L0) t1' ->
     (PatternMatch t1 p s f : T) -->(L0) (PatternMatch t1' p s f : T)
-(* | E_Pat_Succ : TODO *)
+| E_Pat_Succ : forall t Ts T p s f σ s',
+    isplain t ->
+    Match t p = Some σ ->
+    s' = σ(s) ->
+    (PatternMatch (Quote t : □Ts) p s f : T) -->(L0) s'
 | E_Pat_Fail : forall t Ts T p s f,
     isplain t ->
     Match t p = None ->
@@ -380,10 +427,23 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 where "t1 '-->(' L ')' t2" := (reducts L t1 t2).
 Hint Constructors reducts.
 
-Definition id_nat := (Lam TNat (VAR 0 : TNat) : TNat ==> TNat).
-Lemma test_red : (App id_nat (Nat 42 : TNat) : TNat) -->(L0) (Nat 42 : TNat).
-  apply E_Beta.
+Inductive evaluates : typedterm -> typedterm -> Prop :=
+| star_refl : forall t, evaluates t t
+| star_step : forall t1 t2 t3, t1 -->(L0) t2 -> evaluates t2 t3 -> evaluates t1 t3.
+Hint Constructors evaluates.
+
+Lemma test_red : evaluates (App id_nat (Nat 42 : TNat) : TNat) (Nat 42 : TNat).
+  econstructor; eauto.
+  econstructor; eauto.
   cbv. auto.
+Qed.
+
+Definition UnliftConstant := (PatternMatch (Quote (Nat 42 : TNat) : □TNat) (PBindUnlift) (VAR 0 : TNat) (Nat 1 : TNat) : TNat).
+Lemma UnliftConstantTypechecks : ∅ ⊢(L0) UnliftConstant ∈ TNat.
+  econstructor; eauto.
+Qed.
+Lemma UnliftConstantEvaluates : UnliftConstant -->(L0) (Nat 42 : TNat).
+  econstructor; cbv; eauto.
 Qed.
 
 Lemma CanonicalForms1 : forall G t,
@@ -559,7 +619,8 @@ Lemma LevelProgress : forall t G T L,
       destruct H3. subst.
       eexists. eauto.
     + inversion H2. eexists. eauto.
-Qed.
+  - (* PatternMatch *) admit.
+Admitted.
 
 Lemma LevelProgress0 : forall G t T,
     G ⊢(L0) t ∈ T ->
@@ -621,7 +682,9 @@ Lemma Weakening: forall G L t T,
   G' ⊢(L) (shift x t) ∈ T.
   induction 1; intros; subst; simpl_lift_goal;
     econstructor; eauto with lookup_insert insert_insert.
-Qed.
+  - admit.
+  - admit.
+Admitted.
 
 Lemma Substitution : forall t2 G x Lo Li T1 T2,
   (insert x (Li, T1) G) ⊢(Lo) t2 ∈ T2 ->
@@ -642,7 +705,9 @@ Lemma Substitution : forall t2 G x Lo Li T1 T2,
       eauto.
       eauto.
       eauto.
-Qed.
+  - (* PatternMatch *)
+    admit.
+Admitted.
 
 Lemma SubstitutionSimple : forall t2 Li Lj G t1 T1 T2,
     G ⊢(Lj) t1 ∈ T1 ->
@@ -683,4 +748,7 @@ Theorem Preservation : forall t1 T G L,
   - inversion H0; subst.
     + apply T_Unbox. apply IHtyping_judgement. trivial.
     + inversion H; subst. auto.
-Qed.
+  - (* Pattern Match *)
+    inversion H3; subst; eauto with *.
+    admit.
+Admitted.
