@@ -21,6 +21,15 @@ Inductive type :=
 Notation "'□' T" := (TBox T) (at level 48).
 Notation "T1 '==>' T2" := (TArr T1 T2) (at level 48).
 Scheme Equality for type.
+Lemma type_beq_iff : forall T1 T2, true = type_beq T1 T2 -> T1 = T2.
+  induction T1; intros.
+  - cbv in H. destruct T2; simpl in H; try congruence.
+  - destruct T2; cbn in H; try congruence.
+    apply andb_true_eq in H.
+    destruct H. apply IHT1_1 in H. apply IHT1_2 in H0. subst. auto.
+  - destruct T2; cbn in H; try congruence.
+    apply IHT1 in H. subst. auto.
+Qed.
 
 Inductive pattrn :=
 | PNatLit (n : nat)
@@ -274,8 +283,8 @@ Inductive pattern_typing : TypEnv -> pattrn -> type -> list (Level * type) -> Pr
     G ⊢p (PVar x) ∈ T ~~> nil
 (* T_Pat_Fix : TODO *)
 | T_Pat_App : forall G T1 T2,
-    G ⊢p (PBindApp T1 T2) ∈ T2 ~~>
-      cons (L0, T1 ==> T2) (cons (L0, T2) nil)
+    G ⊢p (PBindApp (T1 ==> T2) T1) ∈ T2 ~~>
+      cons (L0, □(T1 ==> T2)) (cons (L0, □T1) nil)
 | T_Pat_Unlift : forall G,
     G ⊢p (PBindUnlift) ∈ TNat ~~> cons (L0, TNat) nil
 | T_Pat_Abs : forall G T1 T2,
@@ -486,6 +495,74 @@ Corollary PatternBindArityCorrect : forall G p T Gp,
   inversion H; auto.
 Qed.
 
+Ltac simpl_match :=
+  match goal with
+  | H: context[match ?x with _ : _ => ?b end] |- _ => destruct x
+  end.
+
+Ltac crush_type_beq_if :=
+  match goal with
+  | H: context [if (type_beq ?T1 ?T2 && ?other) then ?A else ?B] |- _ =>
+    let B := fresh "B" in
+    let HB := fresh "HeqB" in
+    (remember (type_beq T1 T2) as B eqn:HB; destruct B; try apply type_beq_iff in HB)
+  | _ => fail "if type_beq T1 T2 && ... not found"
+  end.
+
+Ltac crush_type_beq_single :=
+  match goal with
+  | H: context [type_beq ?T1 ?T2] |- _ =>
+    let B := fresh "B" in
+    let HB := fresh "HeqB" in
+    (remember (type_beq T1 T2) as B eqn:HB; destruct B; try apply type_beq_iff in HB)
+  | _ => fail "type_beq T1 T2 not found"
+  end.
+
+Ltac crush_type_beq := repeat (crush_type_beq_if; simpl in *); simpl in *; try crush_type_beq_single.
+
+Lemma Correspondence : forall p G t T1 T2 Gp σ,
+    isplain t ->
+    G ⊢(L0) t ∈ T1 ->
+    G ⊢p p ∈ T2 ~~> Gp ->
+    Match t p = Some σ ->
+    T1 = T2.
+  intros.
+  destruct p.
+  - inversion H1; subst.
+    destruct t; destruct u; destruct t; cbn in H2; repeat simpl_match; try solve [congruence | inversion H0].
+    inversion H0. trivial.
+  - cbn in H2. destruct t; destruct u; repeat simpl_match; try congruence.
+    + destruct t; congruence.
+    + destruct (Nat.eq_dec x0 x). subst.
+      inversion H0; inversion H1. subst. congruence.
+      exfalso. congruence.
+    + destruct t; congruence.
+  - destruct t; destruct u; cbn in H2; repeat simpl_match; try congruence.
+    + destruct t; congruence.
+    + destruct t; congruence.
+    + destruct e1; destruct e2.
+      remember (type_beq t0 T0) as B1; remember (type_beq t1 T3) as B2.
+      destruct B1; destruct B2; simpl in H2; try congruence.
+      apply type_beq_iff in HeqB1.
+      apply type_beq_iff in HeqB2.
+      subst.
+      inversion H1. subst. inversion H0. subst. inversion H9; auto.
+  - inversion H1. subst.
+    destruct t; destruct u; destruct t; cbv in H2; repeat simpl_match; try congruence.
+    inversion H0. auto.
+  - inversion H1. subst.
+    destruct t; destruct u; destruct t; cbn in H2; repeat simpl_match; try congruence.
+    inversion H0; subst; try congruence.
+    crush_type_beq; simpl in *; crush_type_beq; subst; try congruence.
+Qed.
+
+Lemma PatternMatching : forall p G v t2 t3 T σ,
+    isvalue v ->
+    G ⊢(L0) (PatternMatch v p t2 t3 : T) ∈ T ->
+    Match v p = Some σ ->
+    G ⊢(L0) σ t2 ∈ T.
+Admitted.
+
 Definition RestrictedLevel (G : TypEnv) (L : Level) : Prop := forall x L' T', lookup x G = Some (L', T') -> L' = L.
 
 
@@ -619,7 +696,21 @@ Lemma LevelProgress : forall t G T L,
       destruct H3. subst.
       eexists. eauto.
     + inversion H2. eexists. eauto.
-  - (* PatternMatch *) admit.
+  - (* PatternMatch *)
+    right.
+    eapply IHL0 in IHt1.
+    + destruct IHt1.
+      * inversion H0. subst.
+        assert (exists t', isplain t' /\ t1 = (Quote t' : □T1)) as Hval.
+        eauto using CanonicalForms3.
+        inversion Hval.
+        inversion H2.
+        remember (Match x p) as Mres.
+        admit.
+      * inversion H1.
+        eauto.
+    + admit.
+    + eauto.
 Admitted.
 
 Lemma LevelProgress0 : forall G t T,
