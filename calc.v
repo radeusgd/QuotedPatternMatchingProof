@@ -556,13 +556,6 @@ Lemma Correspondence : forall p G t T1 T2 Gp σ,
     crush_type_beq; simpl in *; crush_type_beq; subst; try congruence.
 Qed.
 
-Lemma PatternMatching : forall p G v t2 t3 T σ,
-    isvalue v ->
-    G ⊢(L0) (PatternMatch v p t2 t3 : T) ∈ T ->
-    Match v p = Some σ ->
-    G ⊢(L0) σ t2 ∈ T.
-Admitted.
-
 Definition RestrictedLevel (G : TypEnv) (L : Level) : Prop := forall x L' T', lookup x G = Some (L', T') -> L' = L.
 
 
@@ -814,6 +807,60 @@ Lemma SubstitutionSimple : forall t2 Li Lj G t1 T1 T2,
   trivial.
 Qed.
 
+Ltac invPM :=
+  match goal with
+  | H: ?G ⊢(L0) (PatternMatch ?t1 ?p ?t2 ?t3 : ?T) ∈ ?T' |- _ => inversion H; subst
+  end.
+(*
+H10 : G ⊢p PNatLit n ∈ T1 ~~> Gp
+ *)
+Ltac invPP :=
+  match goal with
+  | H: ?G ⊢p ?p ∈ ?T ~~> ?Gp |- _ => inversion H; subst
+  end.
+
+Ltac invV :=
+  match goal with
+  | H: ?G ⊢(L0) ?v ∈ □(?T) |- _ => inversion H; subst
+  end.
+
+Ltac cbnMatch :=
+  match goal with
+  | H: Match ?t ?p = ?res |- _ => cbn in H
+  end.
+
+Lemma PatternMatching : forall p G v t2 t3 T T' σ,
+    isvalue (Quote v : T') ->
+    G ⊢(L0) (PatternMatch (Quote v : T') p t2 t3 : T) ∈ T ->
+    Match v p = Some σ ->
+    G ⊢(L0) σ t2 ∈ T.
+  destruct p; intros; invPM; invPP; invV; subst; cbnMatch; try congruence; subst; repeat simpl_match; try congruence.
+  - destruct v; destruct u; destruct t; try congruence; repeat simpl_match; try congruence.
+    destruct (Nat.eq_dec n0 n).
+    inversion H1. auto.
+    congruence.
+  - destruct v; destruct u; try congruence; repeat simpl_match; try congruence.
+    + destruct t; try congruence.
+    +
+      destruct (Nat.eq_dec x0 x).
+      auto.
+      inversion H1.
+      auto.
+      congruence.
+    + destruct t; try congruence.
+  - destruct v; destruct u; try crush_type_beq; inversion H1; subst; try congruence; try (destruct t; repeat simpl_match; congruence).
+    admit.
+  - destruct v; destruct u; try crush_type_beq; inversion H1; subst; try congruence; try (destruct t; repeat simpl_match; congruence).
+    destruct t; try congruence.
+    inversion H1. subst.
+    admit.
+  - destruct v; destruct u; try crush_type_beq; inversion H1; subst; try congruence; try (destruct t; repeat simpl_match; congruence).
+    destruct t; try congruence.
+    crush_type_beq; crush_type_beq; crush_type_beq; try congruence.
+    inversion H3; subst.
+    admit.
+Admitted.
+
 Theorem Preservation : forall t1 T G L,
     G ⊢(L) t1 ∈ T ->
     forall t2,
@@ -841,5 +888,5 @@ Theorem Preservation : forall t1 T G L,
     + inversion H; subst. auto.
   - (* Pattern Match *)
     inversion H3; subst; eauto with *.
-    admit.
-Admitted.
+    eapply PatternMatching; eauto.
+Qed.
