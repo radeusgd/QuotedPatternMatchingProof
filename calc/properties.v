@@ -255,6 +255,7 @@ Lemma LevelProgress : forall t G T L,
     + inversion H2. eexists. eauto.
   - (* PatternMatch *)
     right.
+    inversion H0; subst.
     eapply IHL0 in IHt1.
     + destruct IHt1.
       * inversion H0. subst.
@@ -262,13 +263,16 @@ Lemma LevelProgress : forall t G T L,
         eauto using CanonicalForms3.
         inversion Hval.
         inversion H2.
+        subst.
         remember (Match x p) as Mres.
-        admit.
+        destruct Mres.
+        -- eexists. eapply E_Pat_Succ; eauto.
+        -- eexists. eapply E_Pat_Fail; eauto.
       * inversion H1.
         eauto.
-    + admit.
     + eauto.
-Admitted.
+    + eauto.
+Qed.
 
 Lemma LevelProgress0 : forall G t T,
     G ⊢(L0) t ∈ T ->
