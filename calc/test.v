@@ -202,14 +202,22 @@ Lemma rev_snd_id_ev :
   repeat push_subst.
 
   econstructor; eauto.
-  cbv. eauto.
-  cbv.
+  cbn. eauto.
+  cbn.
 
   eapply star_step.
   repeat econstructor.
-  
+  simpl_subst_all. cbn. simpl_lift_all.
 
+  (* this is the interesting place
+     we have match □(#0) ~ #6 ...
+     it indeed doesn't match but for a different reason than we'd expect
+     - the inner pattern should be shifted to #1
+  *)
+  eapply E_Pat_Fail; eauto.
 
+  eapply star_step.
+  repeat econstructor.
 
-  (* reached failure but not for the right reason *)
-Admitted.
+  eapply star_refl.
+Qed.
