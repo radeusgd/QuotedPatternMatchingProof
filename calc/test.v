@@ -271,3 +271,33 @@ Lemma rev_fst_id_ev :
   Intuition says it would lead to incorrectness, but is it certain?
     *)
 Admitted.
+
+Lemma mini_preservation :
+  exists t,
+    rev_fst_id -->(L0) t /\ ∅ ⊢(L0) t ∈ □TNat.
+  cbv.
+  eexists.
+  constructor.
+  - repeat econstructor.
+  -
+    unfold substitute.
+    repeat push_subst.
+    repeat econstructor.
+    cbn.
+    repeat lookup_insert_all.
+    (*
+we get
+  lookup 0 (empty (Level * type)) =
+  Some (L1, TNat ==> (TNat ==> TNat))
+which is of course False (can be proven with lookup_empty_Some)
+     *)
+
+    (* proof sketch that this is false *)
+    assert(
+        lookup 0 (empty (Level * type)) =
+        Some (L1, TNat ==> (TNat ==> TNat))
+      ).
+    + admit. (* assume we were somehow able to prove it *)
+    + exfalso. (* and prove false *)
+      eapply lookup_empty_Some; eauto.
+Admitted.
