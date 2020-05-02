@@ -221,3 +221,53 @@ Lemma rev_snd_id_ev :
 
   eapply star_refl.
 Qed.
+
+Definition rev_fst_id := (run_in_ctx (App rev (Quote code_fst : □TNat) : □TNat)).
+
+Lemma rev_fst_id_typ : ∅ ⊢(L0) rev_fst_id ∈ □TNat.
+  cbv.
+  repeat econstructor.
+Qed.
+
+Definition code_fst_rev := App (App (VAR 1 : funtype) (const 2) : TNat ==> TNat) (const 1) : TNat.
+Lemma rev_fst_id_ev :
+  evaluates
+    rev_fst_id
+    (in_ctx code_fst_rev).
+  cbv in *.
+
+  eapply star_step.
+  repeat econstructor.
+
+  eapply star_step.
+  unfold substitute. simpl_subst_all.
+  repeat push_subst.
+
+  repeat econstructor.
+
+  eapply star_step.
+  unfold substitute.
+  simpl_lift_all.
+  repeat econstructor.
+  repeat push_subst.
+
+  econstructor; eauto.
+  cbn. eauto.
+  cbn.
+
+  eapply star_step.
+  repeat econstructor.
+  simpl_subst_all. cbn. simpl_lift_all.
+
+  eapply E_Pat_Succ; eauto.
+  - (*
+      Currently we get
+  Match (VAR 1 : TNat ==> (TNat ==> TNat))
+    (PVar 6) = Some ?σ
+
+  which of course fails because 1 != 6
+  It would have worked if PVar was shifted down to 6 as it should have.
+  I'm however also thinking what would happen if we instead shifted VAR 1 up.
+  Intuition says it would lead to incorrectness, but is it certain?
+    *)
+Admitted.
