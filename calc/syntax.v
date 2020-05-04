@@ -2,7 +2,6 @@ Set Implicit Arguments.
 Require Import Dblib.DblibTactics.
 Require Import Dblib.DeBruijn.
 Require Import Coq.Bool.Bool.
-
 (* SYNTAX *)
 
 Definition DeBruijnIndex := nat.
@@ -24,15 +23,6 @@ Lemma type_beq_iff : forall T1 T2, true = type_beq T1 T2 -> T1 = T2.
     apply IHT1 in H. subst. auto.
 Qed.
 
-Inductive pattrn :=
-| PNatLit (n : nat)
-| PVar (x : DeBruijnIndex)
-(* | PBindVar (T : type) - we exclude this pattern as it is useless in non-nested pattern matching *)
-| PBindApp (T1 T2 : type)
-| PBindUnlift
-| PBindLam (T : type)
-.
-
 Inductive typedterm :=
 | TypedTerm (u: term) (t: type)
 with term :=
@@ -43,45 +33,12 @@ with term :=
      | Lift (e: typedterm)
      | Quote (e : typedterm)
      | Splice (e : typedterm)
-     | PatternMatch (e : typedterm) (pat : pattrn) (success failure : typedterm)
+     | MatchNat (e : typedterm) (n : nat) (es ef : typedterm)
+     | MatchVar (e : typedterm) (x : term) (es ef : typedterm) (* var is a general term here but only VAR x is allowed in this term, this is done to correctly handle shifting of the DeBruijn index *)
+     | MatchApp (e : typedterm) (T1 T2 : type) (es ef : typedterm)
+     | MatchUnlift (e : typedterm) (es ef : typedterm)
+     | MatchLam (e : typedterm) (T : type) (es ef : typedterm)
 .
-Notation "u ':' T" := (TypedTerm u T) (at level 49).
-Scheme typedterm_mutualind := Induction for typedterm Sort Prop
-  with term_mutualind := Induction for term Sort Prop.
-
-Lemma syntactic :
-  forall (P : typedterm -> Prop),
-    (forall n : nat, forall T : type, P (Nat n : T)) ->
-    (forall x : DeBruijnIndex, forall T : type, P (VAR x : T)) ->
-    (forall (argT : type)
-       (ebody : typedterm),
-        P ebody -> forall T : type, P (Lam argT ebody : T)) ->
-    (forall e1 : typedterm,
-        P e1 ->
-        forall e2 : typedterm,
-          P e2 -> forall T : type, P (App e1 e2 : T)) ->
-    (forall e : typedterm,
-        P e -> forall T : type, P (Lift e : T)) ->
-    (forall e : typedterm,
-        P e -> forall T : type, P (Quote e : T)) ->
-    (forall e : typedterm,
-        P e -> forall T : type, P (Splice e : T)) ->
-    (forall (e s f : typedterm) (p : pattrn), P e -> P s -> P f -> forall T : type, P (PatternMatch e p s f : T)) ->
-    forall t : typedterm, P t
-.
-  intros.
-  eapply typedterm_mutualind.
-  - intro. intro. exact H7.
-  - auto.
-  - auto.
-  - auto.
-  - auto.
-  - auto.
-  - auto.
-  - auto.
-  - intros.
-    intro. auto.
-Qed.
 
 (* Definition RemoveType (tt : typedterm) : term := match tt with *)
 (*                                                  | TypedTerm t _ => t *)
@@ -92,18 +49,9 @@ Instance var_term : Var term := {
                                  var := VAR
                                }.
 
-Definition pattern_binders_count (pat : pattrn) : nat :=
-  match pat with
-  | PNatLit _ => 0
-  | PVar _ => 0
-  | PBindApp _ _ => 2
-  | PBindUnlift => 1
-  | PBindLam _ => 1
-  end.
-
 Fixpoint traverse_typedterm (f : nat -> nat -> term) l t :=
   match t with
-  | u : T => TypedTerm (traverse_term f l u) T
+  | TypedTerm u T => TypedTerm (traverse_term f l u) T
   end
 with traverse_term f l u :=
        match u with
@@ -114,8 +62,16 @@ with traverse_term f l u :=
        | Lift e => Lift (traverse_typedterm f l e)
        | Quote e => Quote (traverse_typedterm f l e)
        | Splice e => Splice (traverse_typedterm f l e)
-       | PatternMatch e pat success failure =>
-         PatternMatch (traverse_typedterm f l e) pat (traverse_typedterm f (pattern_binders_count pat + l) success) (traverse_typedterm f l failure)
+       | MatchNat e n es ef =>
+         MatchNat (traverse_typedterm f l e) n (traverse_typedterm f (l) es) (traverse_typedterm f l ef)
+       | MatchVar e x es ef =>
+         MatchVar (traverse_typedterm f l e) (traverse_term f l x) (traverse_typedterm f (l) es) (traverse_typedterm f l ef)
+       | MatchApp e T1 T2 es ef =>
+         MatchApp (traverse_typedterm f l e) T1 T2 (traverse_typedterm f (2 + l) es) (traverse_typedterm f l ef)
+       | MatchUnlift e es ef =>
+         MatchUnlift (traverse_typedterm f l e) (traverse_typedterm f (1 + l) es) (traverse_typedterm f l ef)
+       | MatchLam e T1 es ef =>
+         MatchLam (traverse_typedterm f l e) T1 (traverse_typedterm f (1 + l) es) (traverse_typedterm f l ef)
        end.
 
 Instance Traverse_t_tt : Traverse term typedterm := {
@@ -190,6 +146,13 @@ with traverse_relative_term_typedterm:
          traverse g l t.
 Proof.
   prove_traverse_relative.
+  (* for some reason after adding the 4th recursive argument in MatchVar the automatic proof no longer manages to finish up, so some manual finish is required; unfortunately the automatic tactic also takes a lot of time because of that (expect up to a minute) *)
+  fold traverse_typedterm.
+  assert ((traverse_typedterm f (l + p) e) = (traverse_typedterm g l e)). eauto.
+  assert ((traverse_typedterm f (l + p) es) = (traverse_typedterm g l es)). eauto.
+  assert ((traverse_typedterm f (l + p) ef) = (traverse_typedterm g l ef)). eauto.
+  assert ((traverse_term f (l + p) t) = (traverse_term g l t)). eauto.
+  congruence.
   prove_traverse_relative.
 Qed.
 
@@ -228,6 +191,47 @@ Instance TraverseVarIsIdentity_term_typedterm : @TraverseVarIsIdentity term _ ty
 Proof.
   constructor. apply traverse_typedterm_var_is_identity.
 Qed.
+
+
+Notation "u ':' T" := (TypedTerm u T) (at level 49).
+
+Scheme typedterm_mutualind := Induction for typedterm Sort Prop
+  with term_mutualind := Induction for term Sort Prop.
+
+Lemma syntactic :
+  forall (P : typedterm -> Prop),
+    (forall n : nat, forall T : type, P (Nat n : T)) ->
+    (forall x : DeBruijnIndex, forall T : type, P (VAR x : T)) ->
+    (forall (argT : type) (ebody : typedterm), P ebody -> forall T : type, P (Lam argT ebody : T)) ->
+    (forall e1 : typedterm, P e1 -> forall e2 : typedterm, P e2 -> forall T : type, P (App e1 e2 : T)) ->
+    (forall e : typedterm, P e -> forall T : type, P (Lift e : T)) ->
+    (forall e : typedterm, P e -> forall T : type, P (Quote e : T)) ->
+    (forall e : typedterm, P e -> forall T : type, P (Splice e : T)) ->
+    (forall (e s f : typedterm) (n : nat), P e -> P s -> P f -> forall T : type, P (MatchNat e n s f : T)) ->
+    (forall (e s f : typedterm) (x : term), P e -> P s -> P f -> forall T : type, P (MatchVar e x s f : T)) -> (* not sure if P x should be included? *)
+    (forall (e s f : typedterm) (T1 T2 : type), P e -> P s -> P f -> forall T : type, P (MatchApp e T1 T2 s f : T)) ->
+    (forall (e s f : typedterm), P e -> P s -> P f -> forall T : type, P (MatchUnlift e s f : T)) ->
+    (forall (e s f : typedterm) (T1 : type), P e -> P s -> P f -> forall T : type, P (MatchLam e T1 s f : T)) ->
+
+    forall t : typedterm, P t
+.
+  intros.
+  eapply typedterm_mutualind.
+  - intro. intro. exact H11.
+  - auto.
+  - auto.
+  - auto.
+  - auto.
+  - auto.
+  - auto.
+  - auto.
+  - simpl. auto.
+  - simpl. auto.
+  - simpl. auto.
+  - simpl. auto.
+  - simpl. auto.
+Qed.
+
 
 Lemma test1 : subst (Nat 0) 0 (VAR 0 : TNat) = (Nat 0 : TNat).
   auto.
