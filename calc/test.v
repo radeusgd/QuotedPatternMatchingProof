@@ -9,13 +9,27 @@ Require Import types.
 Require Import semantics.
 
 (* simple 'Unit test' *)
-Definition UnliftConstant := (PatternMatch (Quote (Nat 42 : TNat) : □TNat) (PBindUnlift) (VAR 0 : TNat) (Nat 1 : TNat) : TNat).
+Definition UnliftConstant := (MatchUnlift (Quote (Nat 42 : TNat) : □TNat) (VAR 0 : TNat) (Nat 1 : TNat) : TNat).
 Lemma UnliftConstantTypechecks : ∅ ⊢(L0) UnliftConstant ∈ TNat.
   econstructor; eauto.
 Qed.
 Lemma UnliftConstantEvaluates : UnliftConstant -->(L0) (Nat 42 : TNat).
+  cbv.
   econstructor; cbv; eauto.
 Qed.
+
+Lemma UnliftConstantEvaluatesWrongly : UnliftConstant -->(L0) (Nat 1 : TNat).
+  cbv.
+  Print E_PatUnlift_Fail.
+  eapply E_PatUnlift_Fail.
+  3: {
+    eauto.
+  }
+  cbv. auto.
+  instantiate (1:=1).
+  intro. congruence.
+Qed.
+(* /\ this lemma proves that current definition of PatFail is wrong *)
 
 (* more complex test - reverse order of arguments if the matching function is fst *)
 (*

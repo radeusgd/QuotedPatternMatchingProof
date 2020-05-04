@@ -19,24 +19,6 @@ Notation "∅" := emptyEnv.
 (* Definition env_has (G : TypEnv) (x : DeBruijnIndex) (L : Level) (T : type) : Prop := *)
   (* lookup x G = Some (L, T). *)
 
-Reserved Notation "G '⊢p' p '∈' T '~~>' Gp" (at level 40, T at level 59).
-Inductive pattern_typing : TypEnv -> pattrn -> type -> list (Level * type) -> Prop :=
-| T_Pat_Nat : forall G n,
-    G ⊢p (PNatLit n) ∈ TNat ~~> nil
-| T_Pat_Var : forall G x T,
-    lookup x G = Some (L1, T) ->
-    G ⊢p (PVar x) ∈ T ~~> nil
-(* T_Pat_Fix : TODO *)
-| T_Pat_App : forall G T1 T2,
-    G ⊢p (PBindApp (T1 ==> T2) T1) ∈ T2 ~~>
-      cons (L0, □(T1 ==> T2)) (cons (L0, □T1) nil)
-| T_Pat_Unlift : forall G,
-    G ⊢p (PBindUnlift) ∈ TNat ~~> cons (L0, TNat) nil
-| T_Pat_Abs : forall G T1 T2,
-    G ⊢p (PBindLam (T1 ==> T2)) ∈ (T1 ==> T2) ~~> cons (L0, ((□T1) ==> (□T2))) nil
-where "G '⊢p' p '∈' T '~~>' Gp" := (pattern_typing G p T Gp).
-Hint Constructors pattern_typing.
-
 Reserved Notation "G '⊢(' L ')' t '∈' T" (at level 40, t at level 59, T at level 59).
 Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
 | T_Nat : forall L G n, G ⊢(L) (Nat n : TNat) ∈ TNat
@@ -60,12 +42,32 @@ Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
     G ⊢(L0) t ∈ □T ->
     G ⊢(L1) (Splice t : T) ∈ T
 (* | T_Fix : TODO *)
-| T_Pat : forall G t1 ts tf T1 T p Gp,
-    G ⊢(L0) t1 ∈ □T1 ->
-    G ⊢p p ∈ T1 ~~> Gp ->
-    (concat G Gp) ⊢(L0) ts ∈ T ->
-    G ⊢(L0) tf ∈ T ->
-    G ⊢(L0) (PatternMatch t1 p ts tf : T) ∈ T
+| T_Pat_Nat : forall G e n es ef T,
+    G ⊢(L0) e ∈ □TNat ->
+    G ⊢(L0) es ∈ T ->
+    G ⊢(L0) ef ∈ T ->
+    G ⊢(L0) (MatchNat e n es ef : T) ∈ T
+| T_Pat_Var : forall G e x es ef T T1,
+    G ⊢(L0) e ∈ □T1 ->
+    lookup x G = Some (L1, T1) ->
+    G ⊢(L0) es ∈ T ->
+    G ⊢(L0) ef ∈ T ->
+    G ⊢(L0) (MatchVar e (VAR x) es ef : T) ∈ T
+| T_Pat_App : forall G e es ef T T1 T2,
+    G ⊢(L0) e ∈ □T2 ->
+    (insert 0 (L0, □T1) (insert 0 (L0, □(T1 ==> T2)) G)) ⊢(L0) es ∈ T ->
+    G ⊢(L0) ef ∈ T ->
+    G ⊢(L0) (MatchApp e T1 T2 es ef : T) ∈ T
+| T_Pat_Unlift : forall G e es ef T,
+    G ⊢(L0) e ∈ □TNat ->
+    (insert 0 (L0, TNat) G) ⊢(L0) es ∈ T ->
+    G ⊢(L0) ef ∈ T ->
+    G ⊢(L0) (MatchUnlift e es ef : T) ∈ T
+| T_Pat_Lam : forall G e es ef T T1 T2,
+    G ⊢(L0) e ∈ □(T1 ==> T2) ->
+    (insert 0 (L0, (□T1) ==> (□T2)) G) ⊢(L0) es ∈ T ->
+    G ⊢(L0) ef ∈ T ->
+    G ⊢(L0) (MatchLam e (T1 ==> T2) es ef : T) ∈ T
 where "G '⊢(' L ')' t '∈' T" := (typing_judgement G L t T).
 Hint Constructors typing_judgement.
 
