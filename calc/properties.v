@@ -8,13 +8,20 @@ Require Import syntax.
 Require Import types.
 Require Import semantics.
 
-(* simple 'Unit test' *)
-Definition UnliftConstant := (PatternMatch (Quote (Nat 42 : TNat) : □TNat) (PBindUnlift) (VAR 0 : TNat) (Nat 1 : TNat) : TNat).
-Lemma UnliftConstantTypechecks : ∅ ⊢(L0) UnliftConstant ∈ TNat.
-  econstructor; eauto.
+Definition dec (x y : nat) : x = y \/ x <> y.
+  remember (x =? y).
+  destruct b.
+  * left. apply beq_nat_true. intuition.
+  * right. apply beq_nat_false. intuition.
 Qed.
-Lemma UnliftConstantEvaluates : UnliftConstant -->(L0) (Nat 42 : TNat).
-  econstructor; cbv; eauto.
+
+Definition decT (x y : type) : x = y \/ x <> y.
+  remember (type_beq x y).
+  destruct b.
+  - left. apply type_beq_iff. auto.
+  - right. intro.
+    apply type_beq_iff in H.
+    congruence.
 Qed.
 
 (* Proofs *)
@@ -52,13 +59,6 @@ Lemma CanonicalForms3 : forall G t T,
   cbn in H2. auto.
 Qed.
 
-Corollary PatternBindArityCorrect : forall G p T Gp,
-    G ⊢p p ∈ T ~~> Gp ->
-    pattern_binders_count p = length Gp.
-  intros.
-  inversion H; auto.
-Qed.
-
 Ltac simpl_match :=
   match goal with
   | H: context[match ?x with _ : _ => ?b end] |- _ => destruct x
@@ -84,41 +84,10 @@ Ltac crush_type_beq_single :=
 
 Ltac crush_type_beq := repeat (crush_type_beq_if; simpl in *); simpl in *; try crush_type_beq_single.
 
-Lemma Correspondence : forall p G t T1 T2 Gp σ,
-    isplain t ->
-    G ⊢(L0) t ∈ T1 ->
-    G ⊢p p ∈ T2 ~~> Gp ->
-    Match t p = Some σ ->
-    T1 = T2.
-  intros.
-  destruct p.
-  - inversion H1; subst.
-    destruct t; destruct u; destruct t; cbn in H2; repeat simpl_match; try solve [congruence | inversion H0].
-    inversion H0. trivial.
-  - cbn in H2. destruct t; destruct u; repeat simpl_match; try congruence.
-    + destruct t; congruence.
-    + destruct (Nat.eq_dec x0 x). subst.
-      inversion H0; inversion H1. subst. congruence.
-      exfalso. congruence.
-    + destruct t; congruence.
-  - destruct t; destruct u; cbn in H2; repeat simpl_match; try congruence.
-    + destruct t; congruence.
-    + destruct t; congruence.
-    + destruct e1; destruct e2.
-      remember (type_beq t0 T0) as B1; remember (type_beq t1 T3) as B2.
-      destruct B1; destruct B2; simpl in H2; try congruence.
-      apply type_beq_iff in HeqB1.
-      apply type_beq_iff in HeqB2.
-      subst.
-      inversion H1. subst. inversion H0. subst. inversion H9; auto.
-  - inversion H1. subst.
-    destruct t; destruct u; destruct t; cbv in H2; repeat simpl_match; try congruence.
-    inversion H0. auto.
-  - inversion H1. subst.
-    destruct t; destruct u; destruct t; cbn in H2; repeat simpl_match; try congruence.
-    inversion H0; subst; try congruence.
-    crush_type_beq; simpl in *; crush_type_beq; subst; try congruence.
-Qed.
+
+(* We don't have a Correspondence Lemma anymore, as there's no Match function.
+   The Pattern Match Lemma will be split into substitution lemmas for each pattern with binders, ie.
+   PatAppSubstitution, PatUnliftSubstitution and PatLam substitution *)
 
 Definition RestrictedLevel (G : TypEnv) (L : Level) : Prop := forall x L' T', lookup x G = Some (L', T') -> L' = L.
 
@@ -181,6 +150,38 @@ Ltac autoselectL0L1Case := (match goal with
                | |- context[L0 = L0] => goL0
                | |- context[L1 = L1] => goL1
                end).
+
+Lemma isplain_decidable t1 : (decide_isplain t1 = true) \/ (decide_isplain t1 = false).
+  remember (decide_isplain t1).
+  destruct b; eauto.
+Qed.
+
+Ltac crushFail Rule := eexists; (eapply Rule; eauto); congruence.
+Ltac crushFails := solve [crushFail E_PatNat_Fail
+                         | crushFail E_PatVar_Fail
+                         | crushFail E_PatApp_Fail
+                         | crushFail E_PatUnlift_Fail
+                         | crushFail E_PatLam_Fail
+                       ].
+
+Ltac prepareMatchProgress :=
+  match goal with
+  | hval: isvalue ?t1 |- _ =>
+    match goal with
+    | htyp: ?G ⊢(L0) t1 ∈ □?T |- _ =>
+      let Hisval := fresh "Hisval" in
+      (inversion hval as [Hisval];
+       (inversion htyp; subst; cbn in Hisval; try congruence);
+       (match goal with
+        | hl1: G ⊢(L1) ?t ∈ ?T |- _ =>
+          let ter := fresh "ter" in
+          let ty := fresh "T" in
+          destruct t as [ter ty]; destruct ter; cbn in Hisval; try congruence;
+          try crushFails
+       end))
+      (* (destruct t; destruct u; cbn in Hisval; try congruence; try (crushFail E_PatNat_Fail). *)
+    end
+  end.
 
 Lemma LevelProgress : forall t G T L,
     RestrictedLevel G L1 ->
@@ -253,25 +254,56 @@ Lemma LevelProgress : forall t G T L,
       destruct H3. subst.
       eexists. eauto.
     + inversion H2. eexists. eauto.
-  - (* PatternMatch *)
-    right.
+  - right. (* MatchNat *)
     inversion H0; subst.
-    eapply IHL0 in IHt1.
-    + destruct IHt1.
-      * inversion H0. subst.
-        assert (exists t', isplain t' /\ t1 = (Quote t' : □T1)) as Hval.
-        eauto using CanonicalForms3.
-        inversion Hval.
-        inversion H2.
-        subst.
-        remember (Match x p) as Mres.
-        destruct Mres.
-        -- eexists. eapply E_Pat_Succ; eauto.
-        -- eexists. eapply E_Pat_Fail; eauto.
-      * inversion H1.
-        eauto.
-    + eauto.
-    + eauto.
+    eapply IHL0 in IHt1; eauto.
+    destruct IHt1.
+    + prepareMatchProgress.
+      destruct (dec n0 n); subst; try (crushFail E_PatNat_Fail).
+      eexists. eapply E_PatNat_Succ; eauto.
+      inversion H0. subst. inversion H4. auto.
+    + inversion H1.
+      eexists.
+      eapply E_PatNat_Red. eauto.
+  - right. (* MatchVar *)
+    inversion H0; subst.
+    eapply IHL0 in IHt1; eauto.
+    destruct IHt1.
+    + prepareMatchProgress.
+      destruct (dec x x0); subst.
+      * eexists. eapply E_PatVar_Succ; eauto.
+        inversion H4; subst; auto.
+      * crushFails.
+    + inversion H1. eexists. eapply E_PatVar_Red; eauto.
+  - right. (* MatchApp *)
+    inversion H0; subst.
+    eapply IHL0 in IHt1; eauto.
+    destruct IHt1.
+    + prepareMatchProgress.
+      inversion H4; subst.
+      destruct (decT T1 T2).
+      * subst.
+        destruct e1; destruct e2.
+        inversion H13; inversion H9; subst;
+          eexists; eapply E_PatApp_Succ; eauto.
+      * inversion H9; inversion H13; subst; crushFails.
+    + inversion H1. eexists. eapply E_PatApp_Red; eauto.
+  - right. (* MatchUnlift *)
+    inversion H0; subst.
+    eapply IHL0 in IHt1; eauto.
+    destruct IHt1.
+    + prepareMatchProgress.
+      eexists. eapply E_PatUnlift_Succ; eauto.
+      inversion H4. eauto.
+    + inversion H1. eexists. eapply E_PatUnlift_Red; eauto.
+  - right. (* MatchLam *)
+    inversion H0; subst.
+    eapply IHL0 in IHt1; eauto.
+    destruct IHt1.
+    + prepareMatchProgress.
+      eexists. eapply E_PatLam_Succ; eauto.
+      inversion H4. eauto.
+    + inversion H1. eexists. eapply E_PatLam_Red; eauto.
 Qed.
 
 Lemma LevelProgress0 : forall G t T,

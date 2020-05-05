@@ -13,14 +13,18 @@ Inductive type :=
 Notation "'□' T" := (TBox T) (at level 48).
 Notation "T1 '==>' T2" := (TArr T1 T2) (at level 48).
 Scheme Equality for type.
-Lemma type_beq_iff : forall T1 T2, true = type_beq T1 T2 -> T1 = T2.
-  induction T1; intros.
-  - cbv in H. destruct T2; simpl in H; try congruence.
-  - destruct T2; cbn in H; try congruence.
-    apply andb_true_eq in H.
+Lemma type_beq_iff : forall T1 T2, true = type_beq T1 T2 <-> T1 = T2.
+  induction T1; intros; intuition; cbn in *; destruct T2; try congruence.
+  - apply andb_true_eq in H.
     destruct H. apply IHT1_1 in H. apply IHT1_2 in H0. subst. auto.
-  - destruct T2; cbn in H; try congruence.
-    apply IHT1 in H. subst. auto.
+  - inversion H. subst.
+    symmetry.
+    apply andb_true_iff.
+    constructor; symmetry.
+    + eapply IHT1_1. auto.
+    + eapply IHT1_2. auto.
+  - apply IHT1 in H. congruence.
+  - apply IHT1. congruence.
 Qed.
 
 Inductive typedterm :=
