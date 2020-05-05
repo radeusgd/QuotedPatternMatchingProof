@@ -82,73 +82,74 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 | E_Lift_Red : forall n TN T,
     (Lift (Nat n : TN) : T) -->(L0) (Quote (Nat n : TN) : T)
 | E_PatNat_Succ : forall n t t' T s f,
+    t' = (Quote t : □TNat) ->
     t = (Nat n : TNat) ->
     isplain t ->
-    t' = (Quote t : □TNat) ->
     (MatchNat t' n s f : T) -->(L0) s
 | E_PatNat_Red : forall t t' n T s f,
     t -->(L0) t' ->
     (MatchNat t n s f : T) -->(L0) (MatchNat t' n s f : T)
 | E_PatNat_Fail : forall n t t' T s f,
+    t' = (Quote t : □TNat) ->
     isplain t ->
     t <> (Nat n : TNat) ->
-    t' = (Quote t : □TNat) ->
     (MatchNat t' n s f : T) -->(L0) f
 | E_PatVar_Succ : forall x t t' T1 T s f,
+    t' = (Quote t : □T1) ->
     t = (VAR x : T1) ->
     isplain t ->
-    t' = (Quote t : □T1) ->
     (MatchVar t' (VAR x) s f : T) -->(L0) s
 | E_PatVar_Red : forall t t' x T s f,
     t -->(L0) t' ->
     (MatchVar t (VAR x) s f : T) -->(L0) (MatchVar t' (VAR x) s f : T)
 | E_PatVar_Fail : forall x t t' T1 T s f,
+    t' = (Quote t : □T1) ->
     isplain t ->
     t <> (VAR x : T1) ->
-    t' = (Quote t : □T1) ->
     (MatchVar t' (VAR x) s f : T) -->(L0) f
 | E_PatApp_Succ : forall t t' e1 T1 e2 T2 T3 T s s' f,
+    t' = (Quote t : □T3) ->
     t = (App (e1 : T1) (e2 : T2) : T3) ->
     isplain t ->
-    t' = (Quote t : □T3) ->
     s' = s.[Quote (e2 : T2) : □T2/].[Quote (e1 : T1) : □T1/] ->
     (MatchApp t' T1 T2 s f : T) -->(L0) s'
 | E_PatApp_Red : forall t t' T1 T2 T s f,
     t -->(L0) t' ->
     (MatchApp t T1 T2 s f : T) -->(L0) (MatchApp t' T1 T2 s f : T)
-| E_PatApp_Fail : forall t t' e1 T1 e2 T2 T3 T s f,
-    t <> (App (e1 : T1) (e2 : T2) : T3) ->
-    isplain t ->
+| E_PatApp_Fail : forall t t' T1 T2 T3 T s f,
     t' = (Quote t : □T3) ->
+    (forall e1 e2 T3, t <> (App (e1 : T1) (e2 : T2) : T3)) ->
+    isplain t ->
     (MatchApp t' T1 T2 s f : T) -->(L0) f
 | E_PatUnlift_Succ : forall t t' n T s s' f,
+    t' = (Quote t : □TNat) ->
     t = (Nat n : TNat) ->
     isplain t ->
-    t' = (Quote t : □TNat) ->
     s' = s.[Nat n : TNat/] ->
     (MatchUnlift t' s f : T) -->(L0) s'
 | E_PatUnlift_Red : forall t t' T s f,
     t -->(L0) t' ->
     (MatchUnlift t s f : T) -->(L0) (MatchUnlift t' s f : T)
-| E_PatUnlift_Fail : forall t t' n T s f,
+| E_PatUnlift_Fail : forall t t' T1 T s f,
+    t' = (Quote t : □T1) ->
     isplain t ->
-    t <> (Nat n : TNat) ->
-    t' = (Quote t : □TNat) ->
+    (forall n, t <> (Nat n : TNat)) ->
     (MatchUnlift t' s f : T) -->(L0) f
-| E_PatLam_Succ : forall t t' T1 body T2 T s s' f,
+| E_PatLam_Succ : forall t t' T1 body T2 T3 T s s' f,
+    t' = (Quote t : □(T1 ==> T2)) ->
     t = (Lam T1 body : T1 ==> T2) ->
     isplain t ->
-    t' = (Quote t : □(T1 ==> T2)) ->
     s' = s.[LiftLambda T1 body T2/] ->
-    (MatchApp t' T1 T2 s f : T) -->(L0) s'
+    T3 = T1 ==> T2 ->
+    (MatchLam t' T3 s f : T) -->(L0) s'
 | E_PatLam_Red : forall t t' T1 T s f,
     t -->(L0) t' ->
     (MatchLam t T1 s f : T) -->(L0) (MatchLam t' T1 s f : T)
-| E_PatLam_Fail : forall t t' T1 body T2 T s f,
-    t <> (Lam T1 body : T1 ==> T2) ->
+| E_PatLam_Fail : forall t t' T3 T s f,
+    t' = (Quote t : □T3) ->
+    (forall T1 T2 body, t <> (Lam T1 body : T1 ==> T2)) ->
     isplain t ->
-    t' = (Quote t : □(T1 ==> T2)) ->
-    (MatchApp t' T1 T2 s f : T) -->(L0) f
+    (MatchLam t' T3 s f : T) -->(L0) f
 | E_App1 : forall L t1 t2 t1' T, t1 -->(L) t1' -> (App t1 t2 : T) -->(L) (App t1' t2 : T)
 | E_App2 : forall L t1 t2 t2' T, t2 -->(L) t2' -> (App t1 t2 : T) -->(L) (App t1 t2' : T)
 | E_Abs : forall t t' T1 T,

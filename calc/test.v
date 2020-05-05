@@ -18,19 +18,23 @@ Lemma UnliftConstantEvaluates : UnliftConstant -->(L0) (Nat 42 : TNat).
   econstructor; cbv; eauto.
 Qed.
 
-Lemma UnliftConstantEvaluatesWrongly : UnliftConstant -->(L0) (Nat 1 : TNat).
-  cbv.
-  Print E_PatUnlift_Fail.
-  eapply E_PatUnlift_Fail.
-  3: {
-    eauto.
-  }
-  cbv. auto.
-  instantiate (1:=1).
-  intro. congruence.
+Lemma UnliftConstantWrongEvaluationNotPossible : ~(UnliftConstant -->(L0) (Nat 1 : TNat)).
+  intro.
+  cbv in *.
+  inversion H.
+  subst.
+  inversion H8. simpl_subst_all. subst.
+  inversion H4.
+  subst. inversion H4. subst.
+  eapply H6.
+  eauto.
 Qed.
-(* /\ this lemma proves that current definition of PatFail is wrong *)
 
+Lemma UnliftSomethingEvaluates2 : (MatchUnlift (Quote (Lam TNat (VAR 0 : TNat) : TNat ==> TNat) : □(TNat ==> TNat)) (VAR 0 : TNat) (Nat 1 : TNat) : TNat) -->(L0) (Nat 1 : TNat).
+  eapply E_PatUnlift_Fail; eauto.
+  - cbv. auto.
+  - intro. congruence.
+Qed.
 (* more complex test - reverse order of arguments if the matching function is fst *)
 (*
 rev :: □Nat -> □Nat
@@ -74,12 +78,12 @@ Definition code_fst := App (App (VAR 1 : funtype) (const 1) : TNat ==> TNat) (co
 Definition code_snd := App (App (VAR 0 : funtype) (const 1) : TNat ==> TNat) (const 2) : TNat.
 Definition rev :=
   (Lam (□TNat) (
-         (PatternMatch (VAR 0 : □TNat)
-                       (PBindApp (TNat ==> TNat) TNat)
-                       (PatternMatch (VAR 1 : □(TNat ==> TNat))
-                                     (PBindApp funtype TNat)
-                                     (PatternMatch (VAR 1 : □(TNat ==> (TNat ==> TNat)))
-                                                   (PVar 6)
+         (MatchApp (VAR 0 : □TNat)
+                       (TNat ==> TNat) TNat
+                       (MatchApp (VAR 1 : □(TNat ==> TNat))
+                                     funtype TNat
+                                     (MatchVar (VAR 1 : □(TNat ==> (TNat ==> TNat)))
+                                                   (VAR 6)
                                                    (Quote
                                                       (App
                                                          (App
@@ -182,9 +186,8 @@ Lemma first_box_inctx :
 
   constructor.
 Qed.
-Hint Unfold pattern_binders_count.
 
-Ltac push_subst := simpl_subst_all; simpl_lift_all; try unfold pattern_binders_count.
+Ltac push_subst := simpl_subst_all; simpl_lift_all.
 (* and now we try executing the simpler, failing case - snd *)
 
 Definition rev_snd_id := (run_in_ctx (App rev (Quote code_snd : □TNat) : □TNat)).
