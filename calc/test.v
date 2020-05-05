@@ -8,17 +8,32 @@ Require Import syntax.
 Require Import types.
 Require Import semantics.
 
-(* simple 'Unit test' *)
-Definition UnliftConstant := (MatchUnlift (Quote (Nat 42 : TNat) : □TNat) (VAR 0 : TNat) (Nat 1 : TNat) : TNat).
+(* simple 'Unit tests' *)
+
+
+Definition const (n : nat):= (Nat n : TNat).
+Definition box_const (n : nat) := (Quote (const n) : □TNat).
+Hint Unfold const box_const.
+
+Lemma SpliceTest : evaluates
+                 (Quote (Splice (Quote (const 42) : □TNat) : TNat) : □TNat)
+                 (Quote (const 42) : □TNat).
+  eapply star_step.
+  repeat econstructor.
+  eapply star_refl.
+Qed.
+
+Definition UnliftConstant := (MatchUnlift (Quote (const 42) : □TNat) (VAR 0 : TNat) (const 1) : TNat).
 Lemma UnliftConstantTypechecks : ∅ ⊢(L0) UnliftConstant ∈ TNat.
+  cbv.
   econstructor; eauto.
 Qed.
-Lemma UnliftConstantEvaluates : UnliftConstant -->(L0) (Nat 42 : TNat).
+Lemma UnliftConstantEvaluates : UnliftConstant -->(L0) (const 42).
   cbv.
   econstructor; cbv; eauto.
 Qed.
 
-Lemma UnliftConstantWrongEvaluationNotPossible : ~(UnliftConstant -->(L0) (Nat 1 : TNat)).
+Lemma UnliftConstantWrongEvaluationNotPossible : ~(UnliftConstant -->(L0) (const 1)).
   intro.
   cbv in *.
   inversion H.
@@ -30,11 +45,59 @@ Lemma UnliftConstantWrongEvaluationNotPossible : ~(UnliftConstant -->(L0) (Nat 1
   eauto.
 Qed.
 
-Lemma UnliftSomethingEvaluates2 : (MatchUnlift (Quote (Lam TNat (VAR 0 : TNat) : TNat ==> TNat) : □(TNat ==> TNat)) (VAR 0 : TNat) (Nat 1 : TNat) : TNat) -->(L0) (Nat 1 : TNat).
+Lemma UnliftNotNatFails : (MatchUnlift (Quote (Lam TNat (VAR 0 : TNat) : TNat ==> TNat) : □(TNat ==> TNat)) (VAR 0 : TNat) (const 1) : TNat) -->(L0) (const 1).
   eapply E_PatUnlift_Fail; eauto.
   - cbv. auto.
   - intro. congruence.
 Qed.
+
+Definition PMatchNat v := (MatchNat (v) 42 (const 23) (const 1) : TNat).
+
+Lemma MatchNatTypes : forall G, G ⊢(L0) PMatchNat (box_const 0) ∈ TNat.
+  intro.
+  repeat econstructor.
+Qed.
+
+Lemma MatchNatSucc : evaluates (PMatchNat (box_const 42)) (const 23).
+  econstructor; cbv.
+  econstructor; cbv; eauto.
+  eauto.
+Qed.
+
+Hint Unfold isplain.
+
+Lemma MatchNatFail : evaluates (PMatchNat (box_const 123)) (const 1).
+  econstructor; cbv.
+  eapply E_PatNat_Fail; eauto.
+  congruence.
+  eauto.
+Qed.
+
+Lemma MatchNatNotSucc : ~ (evaluates (PMatchNat (box_const 42)) (const 1)).
+  intro.
+  inversion H; subst.
+  inversion H0; subst.
+  cbv in *.
+  inversion H1; subst.
+  inversion H2.
+  inversion H8; subst.
+  inversion H4; subst.
+  inversion H8; subst.
+  eapply H10. eauto.
+Qed.
+
+Lemma MatchNatNotFail : ~ (evaluates (PMatchNat (box_const 123)) (const 23)).
+  intro.
+  inversion H; subst.
+  inversion H0; subst.
+  cbv in *.
+  inversion H8.
+  inversion H8; subst.
+  inversion H4; subst.
+  inversion H1; subst.
+  inversion H2.
+Qed.
+
 (* more complex test - reverse order of arguments if the matching function is fst *)
 (*
 rev :: □Nat -> □Nat
@@ -66,10 +129,6 @@ rev =
   || #2)
   || #0
  *)
-
-Definition const (n : nat):= (Nat n : TNat).
-Definition box_const (n : nat) := (Quote (const n) : □TNat).
-Hint Unfold const box_const.
 
 Definition funtype := (TNat ==> (TNat ==> TNat)).
 Definition fun_fst := (Lam TNat (Lam TNat (VAR 1 : TNat) : TNat ==> TNat) : TNat ==> (TNat ==> TNat)).
@@ -308,4 +367,31 @@ Lemma mini_preservation :
     unfold substitute.
     repeat push_subst.
     repeat econstructor.
+Qed.
+
+(* Finally test the lambda unpacking *)
+
+Definition LamTest := MatchLam (Quote (Lam TNat (VAR 0 : TNat) : TNat ==> TNat) : □(TNat ==> TNat)) (TNat ==> TNat) (App (VAR 0 : □TNat ==> □TNat) (box_const 42) : □TNat) (box_const 1) : □TNat.
+
+Lemma LamTestTyp : forall G, G ⊢(L0) LamTest ∈ □TNat.
+  intros.
+  repeat econstructor.
+Qed.
+
+Lemma LamTestEval : evaluates LamTest (box_const 42).
+  cbv.
+  eapply star_step.
+  repeat econstructor.
+  cbn.
+
+  eapply star_step.
+  repeat push_subst.
+
+  econstructor; eauto.
+
+  eapply star_step.
+  unfold substitute. push_subst.
+  repeat econstructor.
+
+  eauto.
 Qed.
