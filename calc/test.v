@@ -226,12 +226,8 @@ Lemma rev_snd_id_ev :
   repeat econstructor.
   simpl_subst_all. cbn. simpl_lift_all.
 
-  (* this is the interesting place
-     we have match □(#0) ~ #6 ...
-     it indeed doesn't match but for a different reason than we'd expect
-     - the inner pattern should be shifted to #1
-  *)
-  eapply E_Pat_Fail; eauto.
+  eapply E_PatVar_Fail; eauto.
+  congruence.
 
   eapply star_step.
   repeat econstructor.
@@ -276,18 +272,30 @@ Lemma rev_fst_id_ev :
   repeat econstructor.
   simpl_subst_all. cbn. simpl_lift_all.
 
-  eapply E_Pat_Succ; eauto.
-  - (*
-      Currently we get
-  Match (VAR 1 : TNat ==> (TNat ==> TNat))
-    (PVar 6) = Some ?σ
+  econstructor; eauto.
 
-  which of course fails because 1 != 6
-  It would have worked if PVar was shifted down to 6 as it should have.
-  I'm however also thinking what would happen if we instead shifted VAR 1 up.
-  Intuition says it would lead to incorrectness, but is it certain?
-    *)
-Admitted.
+  eapply star_step.
+  do 5 econstructor.
+  eapply E_Unbox.
+  repeat econstructor.
+
+  eapply star_step.
+  do 5 econstructor.
+  eapply E_Unbox.
+  econstructor.
+  eapply E_App2.
+  econstructor; eauto.
+
+  eapply star_step.
+  do 5 econstructor. eapply E_Unbox. do 2 econstructor.
+  eapply E_App2.
+  econstructor; eauto.
+
+  eapply star_step.
+  repeat econstructor.
+
+  eapply star_refl.
+Qed.
 
 Lemma mini_preservation :
   exists t,
@@ -300,21 +308,4 @@ Lemma mini_preservation :
     unfold substitute.
     repeat push_subst.
     repeat econstructor.
-    cbn.
-    repeat lookup_insert_all.
-    (*
-we get
-  lookup 0 (empty (Level * type)) =
-  Some (L1, TNat ==> (TNat ==> TNat))
-which is of course False (can be proven with lookup_empty_Some)
-     *)
-
-    (* proof sketch that this is false *)
-    assert(
-        lookup 0 (empty (Level * type)) =
-        Some (L1, TNat ==> (TNat ==> TNat))
-      ).
-    + admit. (* assume we were somehow able to prove it *)
-    + exfalso. (* and prove false *)
-      eapply lookup_empty_Some; eauto.
-Admitted.
+Qed.
