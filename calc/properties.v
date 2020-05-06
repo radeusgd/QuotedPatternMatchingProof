@@ -316,11 +316,6 @@ Lemma LevelProgress0 : forall G t T,
     + congruence.
   - eapply LevelProgress; eauto.
 Qed.
-(* with LevelProgress1 : forall G t T, *)
-(*     RestrictedLevel G L1 -> *)
-(*     G ⊢(L1) t ∈ T -> *)
-(*     not (isvalue (Quote t : □T)) -> *)
-(*     exists t', t -->(L1) t'. *)
 
 Theorem Progress : forall t T,
     ∅ ⊢(L0) t ∈ T ->
@@ -348,8 +343,8 @@ Ltac fold_sub := repeat erewrite <- fold_subst.
   (* ((assert (subst u 0 t = substitute (u : T) t) as Happ); *)
   (* eapply fold_subst; rewrite Happ; destruct Happ). *)
 
-Compute (shift 0 (VAR 1 : TNat)).
-Compute (subst (Nat 42) 1 (VAR 0 : TNat)).
+(* Compute (shift 0 (VAR 1 : TNat)). *)
+(* Compute (subst (Nat 42) 1 (VAR 0 : TNat)). *)
 
 Lemma AscribedTypeIsCorrect : forall G L t T T',
     G ⊢(L) (t : T) ∈ T' -> T = T'.
@@ -366,9 +361,14 @@ Lemma Weakening: forall G L t T,
   G' ⊢(L) (shift x t) ∈ T.
   induction 1; intros; subst; simpl_lift_goal;
     econstructor; eauto with lookup_insert insert_insert.
-  - admit.
-  - admit.
-Admitted.
+
+  eapply IHtyping_judgement2.
+  assert (insert (2 + x) (L', T') (insert 0 (L0, □ T2) (insert 0 (L0, □ (T2 ==> T3)) G))
+          =
+          insert 0 (L0, □ T2) (insert (1 + x) (L', T') (insert 0 (L0, □ (T2 ==> T3)) G))).
+  - insert_insert.
+  - rewrite H. insert_insert.
+Qed.
 
 Lemma Substitution : forall t2 G x Lo Li T1 T2,
   (insert x (Li, T1) G) ⊢(Lo) t2 ∈ T2 ->
@@ -389,8 +389,63 @@ Lemma Substitution : forall t2 G x Lo Li T1 T2,
       eauto.
       eauto.
       eauto.
-  - (* PatternMatch *)
-    admit.
+  - (* MatchVar *)
+    + remember (lt_eq_lt_dec x1 x0) as xcmp.
+      destruct xcmp.
+      * destruct s.
+        -- simpl_subst_all.
+           econstructor; eauto.
+           lookup_insert_all. auto.
+        -- simpl_subst_all.
+      (* this is a tricky case:
+         the substitution results in the pattern var being replaced with an arbitrary term, which not necessarily is typable
+
+         I think this makes the current formulation of Substitution lemma unprovable.
+         I have to reformulate to somehow disallow this from happening.
+       *)
+           (* assert ((Li, T1) = (L1, T3)). *)
+           (* lookup_insert_all. *)
+           (* intro. congruence. *)
+           (* inversion H1. subst. *)
+           (* inversion H0. *)
+           (* ++ subst. *)
+           admit.
+      * simpl_subst_all.
+        econstructor; eauto. lookup_insert_all. auto.
+  - (* MatchApp *)
+    econstructor; eauto.
+    eapply IHt2_2.
+    + assert (insert (2 + x) (Li, T0) (insert 0 (L0, □ T2) (insert 0 (L0, □ (T2 ==> T7)) G))
+              =
+              insert 0 (L0, □ T2) (insert 0 (L0, □ (T2 ==> T7)) (insert x (Li, T0) G))).
+      * eauto.
+      * rewrite H1. eauto.
+    + assert (lift 2 0 t1 : T0 = lift 2 0 (t1 : T0)).
+      auto.
+      rewrite H1.
+      assert (lift 2 0 (t1 : T0) = (shift 0 (shift 0 (t1 : T0)))).
+      * symmetry. eapply lift_lift_fuse. omega.
+      * rewrite H2.
+        eapply Weakening; eauto.
+        eapply Weakening; eauto.
+  - (* MatchUnlift *)
+    econstructor; eauto.
+    apply IHt2_2 with Li T1.
+    + assert (insert (1 + x) (Li, T1) (insert 0 (L0, TNat) G) = insert 0 (L0, TNat) (insert x (Li, T1) G)); eauto.
+    + assert (shift 0 t1 : T1 = shift 0 (t1 : T1)); eauto.
+      rewrite H1.
+      eapply Weakening; eauto.
+  - (* MatchLam *)
+    econstructor; eauto.
+    eapply IHt2_2.
+    + assert (insert 0 (L0, (□ T4) ==> (□ T5)) (insert x (Li, T0) G)
+              =
+              insert (1 + x) (Li, T0) (insert 0 (L0, (□ T4) ==> (□ T5)) G)); eauto.
+      rewrite <- H1.
+      eauto.
+    + assert (shift 0 t1 : T0 = shift 0 (t1 : T0)); eauto. (* TODO may want to create a tactic for this shift/lift pumping *)
+      rewrite H1.
+      eapply Weakening; eauto.
 Admitted.
 
 Lemma SubstitutionSimple : forall t2 Li Lj G t1 T1 T2,
@@ -407,59 +462,15 @@ Lemma SubstitutionSimple : forall t2 Li Lj G t1 T1 T2,
   trivial.
 Qed.
 
-Ltac invPM :=
-  match goal with
-  | H: ?G ⊢(L0) (PatternMatch ?t1 ?p ?t2 ?t3 : ?T) ∈ ?T' |- _ => inversion H; subst
-  end.
-(*
-H10 : G ⊢p PNatLit n ∈ T1 ~~> Gp
- *)
-Ltac invPP :=
-  match goal with
-  | H: ?G ⊢p ?p ∈ ?T ~~> ?Gp |- _ => inversion H; subst
-  end.
-
 Ltac invV :=
   match goal with
   | H: ?G ⊢(L0) ?v ∈ □(?T) |- _ => inversion H; subst
   end.
 
-Ltac cbnMatch :=
+Ltac invStep :=
   match goal with
-  | H: Match ?t ?p = ?res |- _ => cbn in H
+  | H: ?t1 -->(?L) ?t2 |- _ => inversion H; subst
   end.
-
-Lemma PatternMatching : forall p G v t2 t3 T T' σ,
-    isvalue (Quote v : T') ->
-    G ⊢(L0) (PatternMatch (Quote v : T') p t2 t3 : T) ∈ T ->
-    Match v p = Some σ ->
-    G ⊢(L0) σ t2 ∈ T.
-  destruct p; intros; invPM; invPP; invV; subst; cbnMatch; try congruence; subst; repeat simpl_match; try congruence.
-  - destruct v; destruct u; destruct t; try congruence; repeat simpl_match; try congruence.
-    destruct (Nat.eq_dec n0 n).
-    inversion H1. auto.
-    congruence.
-  - destruct v; destruct u; try congruence; repeat simpl_match; try congruence.
-    + destruct t; try congruence.
-    +
-      destruct (Nat.eq_dec x0 x).
-      auto.
-      inversion H1.
-      auto.
-      congruence.
-    + destruct t; try congruence.
-  - destruct v; destruct u; try crush_type_beq; inversion H1; subst; try congruence; try (destruct t; repeat simpl_match; congruence).
-    admit.
-  - destruct v; destruct u; try crush_type_beq; inversion H1; subst; try congruence; try (destruct t; repeat simpl_match; congruence).
-    destruct t; try congruence.
-    inversion H1. subst.
-    admit.
-  - destruct v; destruct u; try crush_type_beq; inversion H1; subst; try congruence; try (destruct t; repeat simpl_match; congruence).
-    destruct t; try congruence.
-    crush_type_beq; crush_type_beq; crush_type_beq; try congruence.
-    inversion H3; subst.
-    admit.
-Admitted.
 
 Theorem Preservation : forall t1 T G L,
     G ⊢(L) t1 ∈ T ->
@@ -469,13 +480,13 @@ Theorem Preservation : forall t1 T G L,
   intros until L.
   intro.
   induction H; intros.
-  - inversion H.
-  - inversion H0.
-  - inversion H0. subst.
+  - invStep.
+  - invStep.
+  - invStep.
     assert (insert 0 (L1, T1) G ⊢( L1) t' ∈ T2).
     apply IHtyping_judgement. trivial.
     apply T_Abs. trivial.
-  - inversion H1; subst; try (eapply T_App; eauto).
+  - invStep; try (eapply T_App; eauto).
     eapply SubstitutionSimple. eauto.
     inversion H. auto.
   - inversion H0; subst.
@@ -484,9 +495,33 @@ Theorem Preservation : forall t1 T G L,
   - inversion H0; subst. eapply T_Box.
     apply IHtyping_judgement. easy.
   - inversion H0; subst.
-    + apply T_Unbox. apply IHtyping_judgement. trivial.
-    + inversion H; subst. auto.
-  - (* Pattern Match *)
-    inversion H3; subst; eauto with *.
-    eapply PatternMatching; eauto.
+    + inversion H; subst; auto.
+    + econstructor.
+      eapply IHtyping_judgement. auto.
+  - invStep; eauto.
+  - invStep; eauto.
+  - (* MatchApp *)
+    invStep; eauto.
+    inversion H0; subst.
+    eapply SubstitutionSimple.
+    + econstructor.
+      inversion H7; subst. inversion H10; subst; eauto.
+    + eapply SubstitutionSimple.
+      * eapply Weakening; eauto.
+        econstructor.
+        inversion H7; subst. inversion H11; subst; eauto.
+      * eauto.
+  - invStep; eauto using SubstitutionSimple.
+  - invStep; eauto.
+    eapply SubstitutionSimple; eauto.
+    unfold LiftLambda.
+    inversion H13.
+    eapply T_Abs.
+    econstructor.
+    eapply SubstitutionSimple; eauto.
+    inversion H; subst. inversion H9; subst.
+    eapply Weakening; eauto.
+    instantiate (2:=L0).
+    instantiate (1:=□T0).
+    eauto.
 Qed.

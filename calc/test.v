@@ -283,7 +283,10 @@ Lemma rev_snd_id_ev :
 
   eapply star_step.
   repeat econstructor.
+  unfold substitute.
   simpl_subst_all. cbn. simpl_lift_all.
+  simpl_subst_all. fold traverse_term.
+  simpl_subst_all.
 
   eapply E_PatVar_Fail; eauto.
   congruence.
@@ -330,6 +333,9 @@ Lemma rev_fst_id_ev :
   eapply star_step.
   repeat econstructor.
   simpl_subst_all. cbn. simpl_lift_all.
+  unfold substitute.
+  simpl_subst_all. fold traverse_term.
+  simpl_subst_all.
 
   econstructor; eauto.
 

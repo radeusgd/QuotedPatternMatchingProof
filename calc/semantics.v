@@ -111,7 +111,7 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
     t' = (Quote t : □T3) ->
     t = (App (e1 : T1) (e2 : T2) : T3) ->
     isplain t ->
-    s' = s.[Quote (e2 : T2) : □T2/].[Quote (e1 : T1) : □T1/] ->
+    s' = s.[shift 0 (Quote (e2 : T2) : □T2)/].[Quote (e1 : T1) : □T1/] ->
     (MatchApp t' T1 T2 s f : T) -->(L0) s'
 | E_PatApp_Red : forall t t' T1 T2 T s f,
     t -->(L0) t' ->
