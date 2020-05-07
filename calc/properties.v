@@ -370,25 +370,51 @@ Lemma Weakening: forall G L t T,
   - rewrite H. insert_insert.
 Qed.
 
+Fixpoint ContainsPatternMatch (t : typedterm): bool :=
+  match t with
+  | u : T =>
+    match u with
+    | Nat _ => false
+    | VAR _ => false
+    | Lam _ body => ContainsPatternMatch body
+    | App e1 e2 => ContainsPatternMatch e1 || ContainsPatternMatch e2
+    | Lift e => ContainsPatternMatch e
+    | Quote e => ContainsPatternMatch e
+    | Splice e => ContainsPatternMatch e
+    | MatchNat _ _ _ _ => true
+    | MatchVar _ _ _ _ => true
+    | MatchApp _ _ _ _ _ => true
+    | MatchUnlift _ _ _ => true
+    | MatchLam _ _ _ _ => true
+    end
+  end.
+
+
 Lemma Substitution : forall t2 G x Lo Li T1 T2,
   (insert x (Li, T1) G) ⊢(Lo) t2 ∈ T2 ->
   forall t1,
-  G ⊢(Li) (t1 : T1) ∈ T1 ->
-  G ⊢(Lo) (subst t1 x t2) ∈ T2.
+    G ⊢(Li) (t1 : T1) ∈ T1 ->
+    (Li = L0 \/ ContainsPatternMatch t2 = false) ->
+    G ⊢(Lo) (subst t1 x t2) ∈ T2.
   induction t2 using syntactic; intros; inversion H; subst; try (simpl_subst_all; eauto).
   - unfold subst_idx; dblib_by_cases; lookup_insert_all; eauto.
     intro. subst. trivial.
   - econstructor.
     eapply IHt2.
-    + enough (insert (1 + x) (Li, T1) (insert 0 (Lo, argT) G) = insert 0 (Lo, argT) (insert x (Li, T1) G)).
-      rewrite H1. trivial.
+    + enough (insert (1 + x) (Li, T1) (insert 0 (Lo, argT) G) = insert 0 (Lo, argT) (insert x (Li, T1) G)) as Hii.
+      rewrite Hii. trivial.
       insert_insert.
-    + enough ((shift 0 (t1 : T1)) = (shift 0 t1) : T1).
-      rewrite <- H1.
+    + enough ((shift 0 (t1 : T1)) = (shift 0 t1) : T1) as Hss.
+      rewrite <- Hss.
       eapply Weakening.
       eauto.
       eauto.
       eauto.
+    + destruct H1; auto.
+  - (* App *)
+    admit.
+  - (* MatchNat *)
+    admit.
   - (* MatchVar *)
     + remember (lt_eq_lt_dec x1 x0) as xcmp.
       destruct xcmp.
@@ -396,6 +422,10 @@ Lemma Substitution : forall t2 G x Lo Li T1 T2,
         -- simpl_subst_all.
            econstructor; eauto.
            lookup_insert_all. auto.
+           admit.
+           admit.
+           admit.
+           admit.
         -- simpl_subst_all.
       (* this is a tricky case:
          the substitution results in the pattern var being replaced with an arbitrary term, which not necessarily is typable
@@ -412,46 +442,47 @@ Lemma Substitution : forall t2 G x Lo Li T1 T2,
            admit.
       * simpl_subst_all.
         econstructor; eauto. lookup_insert_all. auto.
-  - (* MatchApp *)
-    econstructor; eauto.
-    eapply IHt2_2.
-    + assert (insert (2 + x) (Li, T0) (insert 0 (L0, □ T2) (insert 0 (L0, □ (T2 ==> T7)) G))
-              =
-              insert 0 (L0, □ T2) (insert 0 (L0, □ (T2 ==> T7)) (insert x (Li, T0) G))).
-      * eauto.
-      * rewrite H1. eauto.
-    + assert (lift 2 0 t1 : T0 = lift 2 0 (t1 : T0)).
-      auto.
-      rewrite H1.
-      assert (lift 2 0 (t1 : T0) = (shift 0 (shift 0 (t1 : T0)))).
-      * symmetry. eapply lift_lift_fuse. omega.
-      * rewrite H2.
-        eapply Weakening; eauto.
-        eapply Weakening; eauto.
-  - (* MatchUnlift *)
-    econstructor; eauto.
-    apply IHt2_2 with Li T1.
-    + assert (insert (1 + x) (Li, T1) (insert 0 (L0, TNat) G) = insert 0 (L0, TNat) (insert x (Li, T1) G)); eauto.
-    + assert (shift 0 t1 : T1 = shift 0 (t1 : T1)); eauto.
-      rewrite H1.
-      eapply Weakening; eauto.
-  - (* MatchLam *)
-    econstructor; eauto.
-    eapply IHt2_2.
-    + assert (insert 0 (L0, (□ T4) ==> (□ T5)) (insert x (Li, T0) G)
-              =
-              insert (1 + x) (Li, T0) (insert 0 (L0, (□ T4) ==> (□ T5)) G)); eauto.
-      rewrite <- H1.
-      eauto.
-    + assert (shift 0 t1 : T0 = shift 0 (t1 : T0)); eauto. (* TODO may want to create a tactic for this shift/lift pumping *)
-      rewrite H1.
-      eapply Weakening; eauto.
+        admit. admit. admit. admit.
+  (* - (* MatchApp *) *)
+  (*   econstructor; eauto. *)
+  (*   eapply IHt2_2. *)
+  (*   + assert (insert (2 + x) (Li, T0) (insert 0 (L0, □ T2) (insert 0 (L0, □ (T2 ==> T7)) G)) *)
+  (*             = *)
+  (*             insert 0 (L0, □ T2) (insert 0 (L0, □ (T2 ==> T7)) (insert x (Li, T0) G))). *)
+  (*     * eauto. *)
+  (*     * rewrite H1. eauto. *)
+  (*   + assert (lift 2 0 t1 : T0 = lift 2 0 (t1 : T0)). *)
+  (*     auto. *)
+  (*     rewrite H1. *)
+  (*     assert (lift 2 0 (t1 : T0) = (shift 0 (shift 0 (t1 : T0)))). *)
+  (*     * symmetry. eapply lift_lift_fuse. omega. *)
+  (*     * rewrite H2. *)
+  (*       eapply Weakening; eauto. *)
+  (*       eapply Weakening; eauto. *)
+  (* - (* MatchUnlift *) *)
+  (*   econstructor; eauto. *)
+  (*   apply IHt2_2 with Li T1. *)
+  (*   + assert (insert (1 + x) (Li, T1) (insert 0 (L0, TNat) G) = insert 0 (L0, TNat) (insert x (Li, T1) G)); eauto. *)
+  (*   + assert (shift 0 t1 : T1 = shift 0 (t1 : T1)); eauto. *)
+  (*     rewrite H1. *)
+  (*     eapply Weakening; eauto. *)
+  (* - (* MatchLam *) *)
+  (*   econstructor; eauto. *)
+  (*   eapply IHt2_2. *)
+  (*   + assert (insert 0 (L0, (□ T4) ==> (□ T5)) (insert x (Li, T0) G) *)
+  (*             = *)
+  (*             insert (1 + x) (Li, T0) (insert 0 (L0, (□ T4) ==> (□ T5)) G)); eauto. *)
+  (*     rewrite <- H1. *)
+  (*     eauto. *)
+  (*   + assert (shift 0 t1 : T0 = shift 0 (t1 : T0)); eauto. (* TODO may want to create a tactic for this shift/lift pumping *) *)
+  (*     rewrite H1. *)
+  (*     eapply Weakening; eauto. *)
 Admitted.
 
 Lemma SubstitutionSimple : forall t2 Li Lj G t1 T1 T2,
     G ⊢(Lj) t1 ∈ T1 ->
     (insert 0 (Lj, T1) G) ⊢(Li) t2 ∈ T2 ->
-    (* special care will have to be taken here with patterns *)
+    (Lj = L0 \/ ContainsPatternMatch t2 = false) ->
     G ⊢(Li) t2.[t1/] ∈ T2.
   intros.
   sub.
@@ -472,6 +503,36 @@ Ltac invStep :=
   | H: ?t1 -->(?L) ?t2 |- _ => inversion H; subst
   end.
 
+Lemma PlainHasNoPatterns : forall t,
+    isplain t -> ContainsPatternMatch t = false.
+  unfold isplain.
+  induction t using syntactic; eauto; intro; cbn in *; try congruence.
+
+  apply andb_true_iff in H.
+  destruct H as [H1 H2].
+  apply IHt1 in H1.
+  apply IHt2 in H2.
+  apply orb_false_iff. eauto.
+Qed.
+
+Lemma LiftKeepsNoPatterns : forall t B x y,
+    ContainsPatternMatch t = B ->
+    ContainsPatternMatch (lift x y t) = B.
+  induction t using syntactic; intros; simpl_lift_all; eauto.
+
+  cbn in *.
+  destruct B.
+  - apply orb_true_iff in H.
+    apply orb_true_iff.
+    destruct H.
+    + left. apply IHt1. auto.
+    + right. apply IHt2. auto.
+  - apply orb_false_iff in H.
+    apply orb_false_iff.
+    destruct H.
+    constructor; eauto.
+Qed.
+
 Theorem Preservation : forall t1 T G L,
     G ⊢(L) t1 ∈ T ->
     forall t2,
@@ -488,7 +549,7 @@ Theorem Preservation : forall t1 T G L,
     apply T_Abs. trivial.
   - invStep; try (eapply T_App; eauto).
     eapply SubstitutionSimple. eauto.
-    inversion H. auto.
+    inversion H. auto. auto.
   - inversion H0; subst.
     + inversion H; subst. apply T_Box. auto.
     + apply T_Lift. apply IHtyping_judgement. easy.
@@ -511,6 +572,8 @@ Theorem Preservation : forall t1 T G L,
         econstructor.
         inversion H7; subst. inversion H11; subst; eauto.
       * eauto.
+      * auto.
+    + auto.
   - invStep; eauto using SubstitutionSimple.
   - invStep; eauto.
     eapply SubstitutionSimple; eauto.
@@ -524,4 +587,8 @@ Theorem Preservation : forall t1 T G L,
     instantiate (2:=L0).
     instantiate (1:=□T0).
     eauto.
+    right.
+    apply PlainHasNoPatterns in H11.
+    cbn in H11.
+    erewrite LiftKeepsNoPatterns; eauto.
 Qed.
