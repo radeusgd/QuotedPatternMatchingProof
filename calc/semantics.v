@@ -15,6 +15,7 @@ Fixpoint decide_isplain (t : typedterm) : bool :=
     | VAR _ => true
     | Lam _ ebody => decide_isplain ebody
     | App e1 e2 => (decide_isplain e1) && (decide_isplain e2)
+    | Fix e => decide_isplain e
     | _ => false
     end
   end.

@@ -224,6 +224,24 @@ Lemma LevelProgress : forall t G T L,
     + eapply IHL1 in IHt2; eauto.
       * inversion IHt2. eexists; eauto.
       * unfold isvalue. cbn. congruence.
+  - (* Fix L0 *)
+    inversion H0.
+    eapply IHL0 in IHt; eauto. subst.
+    right.
+    destruct IHt.
+    + eapply CanonicalForms2 in H1.
+      inversion H1.
+      rewrite H2.
+      eexists.
+      eapply E_Fix_Red.
+      eauto. eauto.
+    + inversion H1 as [t'].
+      eexists. eauto.
+  - (* Fix L1 *)
+    inversion H0; subst.
+    eapply IHL1 in IHt; eauto.
+    inversion IHt as [t'].
+    eauto.
   - (* Lift L0 *)
     inversion H0.
     eapply IHL0 in IHt; eauto. subst.
