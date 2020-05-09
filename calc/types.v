@@ -32,6 +32,9 @@ Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
     G ⊢(L) t1 ∈ (T1 ==> T2) ->
     G ⊢(L) t2 ∈ T1 ->
     G ⊢(L) (App t1 t2: T2) ∈ T2
+| T_Fix : forall L G t T,
+    G ⊢(L) t ∈ T ==> T ->
+    G ⊢(L) (Fix t : T) ∈ T
 | T_Lift : forall G t,
     G ⊢(L0) t ∈ TNat ->
     G ⊢(L0) (Lift t : □TNat) ∈ □TNat
@@ -41,7 +44,6 @@ Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
 | T_Unbox : forall G t T,
     G ⊢(L0) t ∈ □T ->
     G ⊢(L1) (Splice t : T) ∈ T
-(* | T_Fix : TODO *)
 | T_Pat_Nat : forall G e n es ef T,
     G ⊢(L0) e ∈ □TNat ->
     G ⊢(L0) es ∈ T ->

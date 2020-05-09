@@ -401,3 +401,18 @@ Lemma LamTestEval : evaluates LamTest (box_const 42).
 
   eauto.
 Qed.
+
+Definition Loop := Fix (Lam TNat (VAR 0 : TNat) : TNat ==> TNat) : TNat.
+
+Lemma LoopTypes : forall G, G ⊢(L0) Loop ∈ TNat.
+  intro.
+  repeat econstructor.
+Qed.
+
+Lemma LoopDiverges : Loop -->(L0) Loop.
+  cbv.
+  econstructor.
+  unfold substitute.
+  simpl_subst_all.
+  auto.
+Qed.

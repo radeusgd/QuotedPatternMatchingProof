@@ -34,6 +34,7 @@ with term :=
      | VAR (x : DeBruijnIndex)
      | Lam (argT: type) (ebody : typedterm)
      | App (e1 e2 : typedterm)
+     | Fix (e : typedterm)
      | Lift (e: typedterm)
      | Quote (e : typedterm)
      | Splice (e : typedterm)
@@ -42,6 +43,7 @@ with term :=
      | MatchApp (e : typedterm) (T1 T2 : type) (es ef : typedterm) (* T1 is type of the function and T2 is type of it's argument, so if you want to deconstruct an application of the form (f 2) you should set T1 = TNat -> ?T and T2 = ?T, this may be a little counterintuitive but it is made in such a way to reflect the original calculus where you would use the app pattern nested with a bind, like so: PatApp (PatBind[TNat -> ?T] f) (PatBind[TNat] arg) *)
      | MatchUnlift (e : typedterm) (es ef : typedterm)
      | MatchLam (e : typedterm) (T : type) (es ef : typedterm)
+     | MatchFix (e : typedterm) (T : type) (es ef : typedterm)
 .
 
 (* Definition RemoveType (tt : typedterm) : term := match tt with *)
@@ -63,6 +65,7 @@ with traverse_term f l u :=
        | VAR x => f l x
        | Lam argT ebody => Lam argT (traverse_typedterm f (1 + l) ebody)
        | App e1 e2 => App (traverse_typedterm f l e1) (traverse_typedterm f l e2)
+       | Fix e => Fix (traverse_typedterm f l e)
        | Lift e => Lift (traverse_typedterm f l e)
        | Quote e => Quote (traverse_typedterm f l e)
        | Splice e => Splice (traverse_typedterm f l e)
@@ -76,6 +79,8 @@ with traverse_term f l u :=
          MatchUnlift (traverse_typedterm f l e) (traverse_typedterm f (1 + l) es) (traverse_typedterm f l ef)
        | MatchLam e T1 es ef =>
          MatchLam (traverse_typedterm f l e) T1 (traverse_typedterm f (1 + l) es) (traverse_typedterm f l ef)
+       | MatchFix e T1 es ef =>
+         MatchFix (traverse_typedterm f l e) T1 (traverse_typedterm f (1 + l) es) (traverse_typedterm f l ef)
        end.
 
 Instance Traverse_t_tt : Traverse term typedterm := {
@@ -208,6 +213,7 @@ Lemma syntactic :
     (forall x : DeBruijnIndex, forall T : type, P (VAR x : T)) ->
     (forall (argT : type) (ebody : typedterm), P ebody -> forall T : type, P (Lam argT ebody : T)) ->
     (forall e1 : typedterm, P e1 -> forall e2 : typedterm, P e2 -> forall T : type, P (App e1 e2 : T)) ->
+    (forall e : typedterm, P e -> forall T : type, P (Fix e : T)) ->
     (forall e : typedterm, P e -> forall T : type, P (Lift e : T)) ->
     (forall e : typedterm, P e -> forall T : type, P (Quote e : T)) ->
     (forall e : typedterm, P e -> forall T : type, P (Splice e : T)) ->
@@ -216,12 +222,13 @@ Lemma syntactic :
     (forall (e s f : typedterm) (T1 T2 : type), P e -> P s -> P f -> forall T : type, P (MatchApp e T1 T2 s f : T)) ->
     (forall (e s f : typedterm), P e -> P s -> P f -> forall T : type, P (MatchUnlift e s f : T)) ->
     (forall (e s f : typedterm) (T1 : type), P e -> P s -> P f -> forall T : type, P (MatchLam e T1 s f : T)) ->
+    (forall (e s f : typedterm) (T1 : type), P e -> P s -> P f -> forall T : type, P (MatchFix e T1 s f : T)) ->
 
     forall t : typedterm, P t
 .
   intros.
   eapply typedterm_mutualind.
-  - intro. intro. exact H11.
+  - intro. intro Hp. exact Hp.
   - auto.
   - auto.
   - auto.
@@ -229,6 +236,8 @@ Lemma syntactic :
   - auto.
   - auto.
   - auto.
+  - simpl. auto.
+  - simpl. auto.
   - simpl. auto.
   - simpl. auto.
   - simpl. auto.

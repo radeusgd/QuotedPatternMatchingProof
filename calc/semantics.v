@@ -79,6 +79,9 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
     (App (Lam T1 t : (T1 ==> T2)) v : T2) -->(L0) t'
 | E_Splice : forall t T,
     isplain t -> (Splice (Quote t : □T) : T) -->(L1) t
+| E_Fix_Red : forall T t t',
+    t' = t.[Fix (Lam T t : T ==> T) : T/] ->
+    (Fix (Lam T t : T ==> T) : T) -->(L0) t'
 | E_Lift_Red : forall n TN T,
     (Lift (Nat n : TN) : T) -->(L0) (Quote (Nat n : TN) : T)
 | E_PatNat_Succ : forall n t t' T s f,
@@ -164,8 +167,9 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 | E_Lift : forall t t' T,
     t -->(L0) t' ->
     (Lift t : T) -->(L0) (Lift t' : T)
-(* | E_Fix : TODO *)
-(* | E_Fix_Red : TODO *)
+| E_Fix : forall L t t' T,
+    t -->(L) t' ->
+    (Fix t : T) -->(L) (Fix t' : T)
 where "t1 '-->(' L ')' t2" := (reducts L t1 t2).
 Hint Constructors reducts.
 
