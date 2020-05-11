@@ -395,6 +395,7 @@ Fixpoint ContainsPatternMatch (t : typedterm): bool :=
     | Nat _ => false
     | VAR _ => false
     | Lam _ body => ContainsPatternMatch body
+    | Fix e => ContainsPatternMatch e
     | App e1 e2 => ContainsPatternMatch e1 || ContainsPatternMatch e2
     | Lift e => ContainsPatternMatch e
     | Quote e => ContainsPatternMatch e
@@ -574,6 +575,10 @@ Theorem Preservation : forall t1 T G L,
   - invStep; try (eapply T_App; eauto).
     eapply SubstitutionSimple. eauto.
     inversion H. auto. auto.
+  - (* Fix *)
+    inversion H0; subst; eauto.
+    inversion H.
+    eapply SubstitutionSimple; eauto.
   - inversion H0; subst.
     + inversion H; subst. apply T_Box. auto.
     + apply T_Lift. apply IHtyping_judgement. easy.
@@ -598,8 +603,9 @@ Theorem Preservation : forall t1 T G L,
       * eauto.
       * auto.
     + auto.
-  - invStep; eauto using SubstitutionSimple.
-  - invStep; eauto.
+  - (* MatchUnlift *) invStep; eauto using SubstitutionSimple.
+  - (* MatchLam *)
+    invStep; eauto.
     eapply SubstitutionSimple; eauto.
     unfold LiftLambda.
     inversion H13.
