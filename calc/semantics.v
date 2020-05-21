@@ -179,9 +179,3 @@ Inductive evaluates : typedterm -> typedterm -> Prop :=
 | star_refl : forall t, evaluates t t
 .
 Hint Constructors evaluates.
-
-Lemma test_red : evaluates (App id_nat (Nat 42 : TNat) : TNat) (Nat 42 : TNat).
-  econstructor; eauto.
-  econstructor; eauto.
-  cbv. auto.
-Qed.

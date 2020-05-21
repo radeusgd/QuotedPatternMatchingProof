@@ -9,7 +9,16 @@ Require Import types.
 Require Import semantics.
 
 (* simple 'Unit tests' *)
-
+Definition id_nat := (Lam TNat (VAR 0 : TNat) : TNat ==> TNat).
+Definition id_applied := (App id_nat (Nat 42 : TNat) : TNat).
+Lemma id_app_types : ∅ ⊢(L0) id_applied ∈ TNat.
+  repeat econstructor.
+Qed.
+Lemma id_app_evals : evaluates id_applied (Nat 42 : TNat).
+  eapply star_step. repeat econstructor.
+  unfold substitute. simpl_subst_all.
+  auto.
+Qed.
 
 Definition const (n : nat):= (Nat n : TNat).
 Definition box_const (n : nat) := (Quote (const n) : □TNat).

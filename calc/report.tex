@@ -1,0 +1,317 @@
+% Template by:
+% for 18/19 Trimester 2
+% Chia Jason 1161300548
+% Hor Sui Lyn 1161300122
+%
+\documentclass[runningheads]{article}
+\usepackage{graphicx}
+\usepackage[utf8]{inputenc}
+\usepackage{amsfonts}
+\usepackage[fleqn]{amsmath}
+\usepackage{stmaryrd}
+\usepackage{listings}
+%\usepackage{minted}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage[margin=1in]{geometry}
+\usepackage{pxfonts}
+\usepackage{todonotes}
+\usepackage{wasysym} % lambda circle symbol
+%\usepackage{languages}
+%\usepackage{bcprules}     % typeset inference rule
+
+%\newtheorem*{theorem-no-num}{Theorem}
+
+\setlength{\marginparwidth}{2cm} %% TODO remove - used for TODO
+\newcommand{\calculus}{$\lambda^{\RIGHTcircle}$} 
+\lstset{basicstyle=\ttfamily}
+%\lstdefinestyle{pdot}{
+%  %numbers=left,
+%  %stepnumber=1,
+%  %numbersep=10pt,
+%  %tabsize=4,
+%  showspaces=false,
+%  showstringspaces=false,
+%  mathescape=true,
+%  breaklines=true,
+%  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},linewidth=1.1\textwidth,
+%  %xleftmargin=-0.1\textwidth
+%}
+%\lstset{basicstyle=\small\ttfamily}
+
+% \newcommand{\fresh}[1]{\boxed{#1}}
+
+\begin{document}
+% title
+\title{Mechanized proof for Quoted Pattern Matching in Scala 3}
+%\thanks{Supervised by} % if we want to thank someone/org.
+%
+% authors
+\author{Radosław Waśko}
+%\author{Chia Jason\inst{1}\orcidID{0000-0002-2056-1687} \and
+%Hor Sui Lyn\inst{1}\orcidID{0000-0003-2614-374X}}
+
+%
+%\authorrunning{R. Waśko}
+% First names are abbreviated in the running head.
+%
+%\institute{{EPFL}}
+%
+\maketitle              % typeset the header of the contribution
+%formal
+\begin{abstract}
+  %%% https://plg.uwaterloo.capaper/~migod/research/beckOOPSLA.html
+  \todo[inline]{In orange boxes I put short descriptions of parts that I am yet to write, or on the margin comments and questions}
+  \todo[inline]{write abstract at the end}
+%
+%\keywords{Attendance System  \and Parameter tampering \and Exploit discovery.}
+\end{abstract}
+%
+%
+\section{Introduction}
+
+Scala 3 is getting a new macro system based on staged computation \cite{dottydoc} which also supports pattern matching over code values. The theory behind this addition is described in \textit{Quoted Pattern Matching in Scala 3} paper \cite{QPM}. 
+
+For example, one can quote an expression and pattern match over it to transform it \footnote{Example from \cite{QPM}}
+\begin{verbatim}
+val code = '{ println(1+2) }
+code match
+case '{ println($x)) } =>
+  '{ println("Result of " + ${Expr(x.show)} + ": " + $x) }
+  // the generated code will print: "Result of 1+2: 3"
+\end{verbatim}
+
+The paper introduces $\lambda^{\RIGHTcircle}$ calculus that extends the STLC with quotes, splices and pattern matching over quoted code values. In this semester project we create mechanized proofs of soundness of that calculus, based on the paper proofs in the original paper. The proofs consist of 561 lines of Coq code,
+the calculus with its rules is defined in 448 lines.
+
+In section 1 we describe ... \todo{TODO etc.}
+
+\section{$\lambda^{\RIGHTcircle}$ calculus}
+
+The system is formalized in two parts - there is an \textit{implicitly-typed} language that is then elaborated to an \textit{explicitly-typed} variant in which every term is ascribed with its type. The ascribed types are used as evidence in the operational semantics.
+
+The type system has three forms: a base type for natural numbers ($Nat$), a function type ($T_1 \to T_2$) and a type for code values ($\square T$).
+
+The syntax contains the usual constructs from STLC: lambda abstraction, application and variables. Moreover it has a natural number constants and a fixpoint operator allowing recursion.
+
+It is then extended with quote ($\square e$) and splice ($\$e$) operators typical for staged computation, a \verb|lift| operator allowing to lift a numeric value to a code value returning that number and a simple pattern match construct ($e \sim p \; ? \; e_{succ} \; || \; e_{fail}$).
+The pattern match checks if $e$ matches the pattern $p$ and if it does, reduces to $e_{succ}$ where any bindings introduced by the pattern are available, otherwise it reduces to $e_{fail}$.
+
+A non-reducible value in this calculus can be a natural number, an unapplied lambda or a quoted plain code value. 
+
+A plain term can only contain the non-staged subsed of the calculus - lambdas, abstractions, constants and the fixpoint. Quotes, splices and pattern matching are excluded in plain terms.
+
+Nesting of quotes is spliced is expressed by term's level - level 0 terms are the base terms that are executed and level 1 terms are the boxed code values (which can also contain level 0 terms by splicing). For simplicity, the calculus only supports the two levels.
+
+Below is an example of a term in the calculus, implementing a function that matches application of a function taking a number and replaces its argument with $42$, if the match fails the original code is returned. (We skip the explicit types for clarity):
+
+\begin{equation*}
+  \Big(\lambda e: \square Nat. \; e \sim \big((\texttt{bind} [Nat \to Nat] \; f) \; (\texttt{bind} [Nat] \; x)\big) \; ? \; \square(\$f \; 42) \; || \; e \Big) \;\; \square((\lambda x: Nat. \; x) \; 10)
+\end{equation*}
+
+This term will reduce to a code value with the same function but applied to the different argument: $\square((\lambda x: Nat. \; x) \; 42)$.
+
+\section{Encoding the calculus in Coq}
+We encode the \textit{explicitly-typed} variant of the calculus, as the safety properties are defined for it.
+
+Encoding the calculus required some simplifications to be able to express it in Coq in a reasonable way. We tried to only allow simplifications that don't limit the expressivity of the language, they are mostly changing the syntax and simplifying some constructs, but most of the simplifications could be handled with some form of rewriting.
+
+\subsection{Encoding variable binding}
+
+Variable binding is a common issue that is encountered in all projects that try mechanizing proofs about calculi. 
+
+On paper we just use textual names and define a capture-avoiding substitution operation. This is possible in Coq, but this kind of function is not so easy to define - we need to apply recursively on terms that are not structurally sub-terms of the main terms (because sometimes they may be renamed etc.). As Coq only accepts total functions, we need to show that the invocations are indeed on tems smaller in some way. This however highly complicates the definitions and also makes it harder to reason about theorems using such a complex function.
+
+\subsubsection{De Bruijn indices}
+
+The usual solution to this problem is using De Bruijn indices \cite{Bruijn1972LambdaCN}. In a term encoded using De Bruijn indices, variable names are replaced by indices - numbers that indicate how many binders are in scope (in the expression tree) between the variable and the binder that this variable is referring to. For example the variable referring to the closest lambda gets index 0 (or depending on convention, it can start with 1, but we will start with 0), one referring to the closest lambda after that one gets 1 etc. In such notation, $\alpha$-equivalence is reduced to syntactic equality and defining capture avoiding substitution is much simpler.
+
+For example, the identity function $\lambda x. \, x$ is encoded as $\lambda. \, \#0$ and the K combinator $\lambda x. \, \lambda y. \, x$ becomes $\lambda. \, \lambda. \, \#1$.
+
+All the free variables also have to be remapped to natural numbers. An index greater than the number of binders that it is surrounded by refers to free variables. For example the terms $\#0$ and $\lambda. \#1$ refer to the first free variable, $\#1$ to the second one etc.
+
+When substituting, it is important to keep track of the index - when traversing inside of a binder it has to be updated to still refer to the same variable.
+For example, when reducing $(\lambda. \, \lambda. \, \#1) \; (\lambda. \, \#2)$, $\#2$ refers to the second free variable (we have to skip one binder, so we refer to the free variable number $1$, but as we are $0$-indexing, that is the second free variable), after $\beta$-reduction, we get $\lambda. \lambda. \, \#3$ - the substituted term had to be shifted to still refer to the second free variable (as it is now behind not one but two binders).
+
+\subsubsection{DbLib}
+
+As handling variable binding is common to nearly all calculi formalizations, there are some Coq libraries that help automating parts of reasoning about them. In this project we are using the DbLib library \cite{dblib}, the reasons for choosing it are discussed in section \ref{binderlibs}.
+
+When using DbLib we freely define our syntactic forms as some inductive type. We have two types - typed terms (\texttt{typedterm}) and untyped terms (\texttt{term}), and we can substitute an untyped term into both of these types. To use the automation facilities provided by the library, we need to define:
+\begin{itemize}
+  \item an instance of \texttt{Var} typeclass which is used for constructing variables - it requires a function \texttt{var} that takes a De Bruijn index (which is simply a natural number) and returns an instance of the type that we will be substituting (in our case \texttt{term}); for us the instance is just calling the constructor \texttt{var x = Var x}
+  \item instances of \texttt{Traverse} typeclass which requires a function \texttt{traverse} taking 3 parameters: a function \texttt{f} representing the operation that is applied to the term-tree, a natural number \texttt{l} representing the current level and a term \texttt{t} that is traversed. It has to recursively traverse all subterms in \texttt{t}, increasing \texttt{l} when entering a binder, and each encountered instance of a variable \texttt{Var x} has to be replaced with \texttt{f l x}.
+\end{itemize}
+Afterwards some lemmas have to be proven to show that the \texttt{traverse} function satisfied the required constraints - for example it has to be injective. If the function is defined reasonably, these properties are derived automatically by tactics provided by the library.
+
+Once this is defined, substitution, shift etc. are automatically derived by using the \texttt{traverse} function.
+
+\subsection{Encoding patterns}
+
+Encoding patterns is particularly complicated as the patterns can be arbitrarily nested, so a pattern match could introduce an arbitrary amount of bindings. This is possible to handle, but is much harder to reason about. To simplify the reasoning, we forbid nested patterns. This does not limit the expressivity of the calculus as any nested pattern match can be converted to a series of non-nested patterns.
+
+For example, we can convert 
+\[
+e \sim (\texttt{lam}[Nat \to Nat] \, f) \; 42 \; ? \; f \; \square(10) \; || \; e_{else}
+\] into \[
+e \sim (\texttt{MatchApp} \, [Nat \to Nat] \, a_1 \, [Nat] \, a_2) \; ? \; \Bigg(a_1 \sim (\texttt{MatchLam}[Nat \to Nat] \, f) \; ? \; \big(a_2 \sim \texttt{MatchNat} \, 42 \; ? \; (f \; \square(10))\; || \; e_{fail}\big)\; || \; e_{fail}\Bigg)\; || \; e_{fail}
+\]
+(where \texttt{MatchApp} pattern is a special pattern which matches an application and binds the first and second term to $a_1$ and $a_2$ respectively).
+
+After simplifying to non-nested patterns, the \texttt{bind} pattern is not useful anymore, so we remove it (in non-nested approach it would be equivalent to a let statement). However all of the other patterns that can bind something are changed in a way that they emulate containing the BIND, as shown in the example above. Ultimately, we have the following patterns: Nat, Var, Fix, App, Unlift, Abs, Lam.
+
+Even after the simplification, the App pattern still introduces two variable bindings, so we need to be able to support it. This is still much simpler than the arbitrary amount of bindigs that we started with.
+
+We first tried to encode the patterns as a separate inductive definition and have a single syntactic form for the pattern matching:
+\begin{verbatim}
+Inductive pattrn :=
+| PNat (n : nat)
+| PVar (x : DeBruijnIndex)
+| PBindUnlift
+| PBindApp (T1 T2 : type)
+| PBindLam (T : type).
+
+Inductive typedterm :=
+| TypedTerm (u: term) (t: type)
+with term :=
+| Nat (n : nat)
+| Var (x : DeBruijnIndex)
+| Lam (argT: type) (ebody : typedterm)
+| App (e1 e2 : typedterm)
+| Fix (e : typedterm)
+| Lift (e : typedterm)
+| PatternMatch (e : typedterm) (pat : pattrn) (success failure : typedterm).
+\end{verbatim}
+
+Unfortunately this made us have 3 syntactic forms (untyped terms, typed terms and patterns) and it seemed to be too much for DbLib - the automatic facilities that help us prove the basic lemmas to make the library usable failed and I was also unable to fix the proofs manually.
+
+So in the end we created a separate syntactic form for each pattern. This may look strange, but it is in fact equivalent to the previous formulation, it's just a technical / notational difference.
+
+\begin{verbatim}
+Inductive typedterm :=
+| TypedTerm (u: term) (t: type)
+with term :=
+| Nat (n : nat)
+| VAR (x : DeBruijnIndex)
+| Lam (argT: type) (ebody : typedterm)
+| App (e1 e2 : typedterm)
+| Fix (e : typedterm)
+| Lift (e: typedterm)
+| Quote (e : typedterm)
+| Splice (e : typedterm)
+| MatchNat (e : typedterm) (n : nat) (es ef : typedterm)
+| MatchVar (e : typedterm) (x : term) (es ef : typedterm)
+| MatchApp (e : typedterm) (T1 T2 : type) (es ef : typedterm)
+| MatchUnlift (e : typedterm) (es ef : typedterm)
+| MatchLam (e : typedterm) (T : type) (es ef : typedterm)
+| MatchFix (e : typedterm) (T : type) (es ef : typedterm).
+\end{verbatim}
+
+One other modification that we had to apply here is to the variable matching pattern. This pattern checks if the boxed code is a reference to some variable, so after the De Bruijn translation, this pattern also contains a De Bruijn index for the variable that is matched (see \texttt{PVar} in the first listing). This occurrence is unusual, because we need to update it when shifting all indices in a term, so that it always refers to the original variable (why we have to shift is explained in the previous section). It has to be treated differently, because it should never be substituted with some concrete value.
+
+However in the library that we use, the \texttt{traverse} function is defined in such a way that during traversal we replace each variable with the result of calling \texttt{f l x} which handles all renaming and returns a new instance of the variable using the constructor from the \texttt{Var} typeclass. It is possible to overcome this by unpacking the result, checking if it indeed is an instance of \texttt{VAR} and getting the index from it, but this approach breaks the properties that the library requires of \texttt{traverse}.
+
+Instead, we replace the raw De Bruijn index in \texttt{MatchVar} with an arbitrary term. This satisfies all the constraints required by the library and ensures that this index is updated when necessary. Unfortunately this also allows for ill-formed terms, where we do variable match over something other than a variable. This issue is however addressed in the typing rules - only instances of \texttt{MatchVar} in which \texttt{x} has the form \texttt{VAR y} are accepted. Thus, when we prove Preservation, we also prove that this variable is never substituted for (as the term resulting from such substitution would be ill-typed).
+
+\subsection{Final form of the encoding}
+Most of syntactic details have already been described in the previous section.
+
+Another important change from the paper version is the typing environment. On paper it is defined as a (partial) mapping from variable names to types and levels.
+DbLib is also providing support for using environments with De Bruijn indices, so we used the approach suggested by the library authors - our environment is a list of options - such a list of options can be understood as a partial mapping from natural numbers and it integrates very well with operations on DeBruijn indices. For example when the environment is extended while going inside a binder, the new type is just prepended to the list - this both handles the new type and the fact that other indices are shifted.
+
+We yet had to consider how to handle the levels in the typing environment. One possible solution could be to have a separate environment for both levels - so our \texttt{TypEnv} type would be \texttt{list (option type) * list (option type)}. However binders do not distinguish the levels that they bind, so this approach wouldn't work. Instead we store the level alongside the type in the mapping - so our \texttt{TypEnv} type is \texttt{list (option (level * type))}. The judgement from the original paper $\Gamma(x^i) = T$ is expressed as \texttt{lookup $x$ $\Gamma$ = Some (L$i$, $T$)}.
+
+The typing judgement is defined as an inductive type \texttt{TypEnv $\to$ Level $\to$ typedterm $\to$ type $\to$ Prop} and the small-step semantics relation is defined as \texttt{Level $\to$ typedterm $\to$ typedterm $\to$ Prop}. 
+
+We use Coq's Notations to make our judgements more easily readable. The typing judgement is expressed as \texttt{G $\vdash$(L) e $\in$ T} and the semantics relation as \texttt{e1 -->(L) e2} which quite closely resembles the notation used in the paper.
+
+We also define a relation \texttt{evaluates} which is the reflexive transitive closure of small-step semantics at level 0 that is used in tests. For example we can define a term representing applying the identity function to a number and prove that it typechecks and evaluates correctly:
+\begin{lstlisting}[mathescape=true]
+Definition id_nat := (Lam TNat (VAR 0 : TNat) : TNat ==> TNat).
+Definition id_applied := (App id_nat (Nat 42 : TNat) : TNat).
+Lemma id_app_types : $\emptyset$ $\vdash$(L0) id_applied $\in$ TNat.
+  repeat econstructor.
+Qed.
+Lemma id_app_evals : evaluates id_applied (Nat 42 : TNat).
+  eapply star_step. repeat econstructor.
+  unfold substitute. simpl_subst_all. auto.
+Qed.
+\end{lstlisting}
+
+
+
+\section{Proving soundness}
+We want to prove Progress: If $\emptyset \vdash^0 t \in T$, then $t$ is a value or there exists $t'$ such $t \longrightarrow^0 t'$
+\\
+and Preservation: If $\Gamma \vdash^i t \in T$ and $t \longrightarrow^i t'$, then $\Gamma \vdash^i t' \in T$.
+
+
+First we had to reformulate the theorems into our language. Thanks to Coq's notations they don't differ much:
+\begin{lstlisting}[mathescape=true]
+Theorem Progress : forall t T,
+  $\emptyset$ $\vdash$(L0) t $\in$ T ->
+  isvalue t \/ exists t', t -->(L0) t'.
+Theorem Preservation : forall t1 T G L,
+  G $\vdash$(L) t1 $\in$ T ->
+  forall t2,
+  t1 -->(L) t2 ->
+  G $\vdash$(L) t2 $\in$ T.
+\end{lstlisting}
+
+We have approached the proofs by first trying to prove a subset of the calculus corresponding to STLC, as a warmup. Then we have added quotes, splices and lift and fixed the proofs. Later we have added the pattern matching and at the very end the fixpoint operator. Adding the features step-by-step required rewritting a substantial part of the proofs and sometimes even reformulating some basic definitions. But it also helped to keep the scope more manageable by dividing the proving effort into smaller pieces. The progressive approach also helped me learn piece-by-piece and better understand the paper proofs that I've been basing on.
+
+\subsection{Induction}
+
+\todo[inline]{Explain custom induction principle for mutually recursive}
+
+\subsection{Progress}
+
+\todo[inline]{Explain main challenges and used lemmas}
+
+\subsection{Preservation}
+
+\todo[inline]{Explain main challenges and used lemmas}
+
+
+\section{Discussion}
+\subsection{Variable binding libraries}
+\label{binderlibs}
+
+\todo[inline]{explain autosubst and DbLib and mention the multiple binding issue as the reason we switched to DbLib; explain in short the DbLib infrastructure}
+
+\todo[inline]{Explain also the Locally Nameless approach} In retrospective I think it \todo{Locally nameless} was best fitting for the project, but I have already chosen DbLib for its simplicity (at the time of choosing the libraries I had too little experience with using DeBruijn indices to properly understand and appreciate the LN approach.) \todo{Move this to discussion}
+
+\subsection{Testing before proving}
+Adding the pattern matching was a very delicate matter, especially as we had to diverge slightly from the original calculus. It was easy to make mistakes in the definitions of types and syntax (for example one of the bugs was having the two variables bound by app in different order in the typing judgement and in the semantics). Such mistakes lead to unprovable theorems, but they may not be easy to notice during proving. To avoid such issues, I decided to write some `unit tests' - I defined simple programs in the calculus that I know should work and tried proving that they do typecheck and evaluate correctly. These proofs were usually rather easy but they helped find lots of simple mistakes. Moreover, they can serve as examples of how to use the calculus in the formalized version which helps understanding.
+
+It seems like a very good approach to write some simple tests (for example lemmas about the desired properties of particular terms) before moving to the general soundness proofs.
+
+\subsection{General remarks on using Coq for mechanizations of calculi}
+
+\todo[inline]{Explain some custom tactics}
+\todo[inline]{Explain why matching goals is so useful and the 'stability' of the proofs, why naming things is important}
+
+
+
+\section{Summary}
+
+Our main contribution is the formalized version of the proof that can be found at \\ \href{https://github.com/radeusgd/QuotedPatternMatchingProof/}{https://github.com/radeusgd/QuotedPatternMatchingProof/}...
+
+
+
+\bibliographystyle{unsrt}
+\bibliography{bibliography}
+
+\todo[inline]{Handle URL in bibliography}
+\todo[inline]{ Add references}
+\todo[inline]{cite the upcoming QPM paper?}
+
+\section*{Appendix}
+\todo[inline]{appendix with rules}
+\todo[inline]{show the modified typing and semantic rules for the app pattern}
+
+\todo[inline]{ show type and semantic rules for all the changed patterns ? - answer: put them in appendix}
+
+
+
+\end{document}

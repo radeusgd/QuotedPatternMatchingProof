@@ -74,7 +74,3 @@ Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
 where "G '⊢(' L ')' t '∈' T" := (typing_judgement G L t T).
 Hint Constructors typing_judgement.
 
-Definition id_nat := (Lam TNat (VAR 0 : TNat) : TNat ==> TNat).
-Lemma TypingIdTest : ∅ ⊢(L0) (Lam TNat (VAR 0 : TNat) : TNat ==> TNat) ∈ TNat ==> TNat.
-  auto.
-Qed.
