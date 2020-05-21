@@ -403,6 +403,7 @@ Fixpoint ContainsPatternMatch (t : typedterm): bool :=
     | MatchNat _ _ _ _ => true
     | MatchVar _ _ _ _ => true
     | MatchApp _ _ _ _ _ => true
+    | MatchFix _ _ _ _ => true
     | MatchUnlift _ _ _ => true
     | MatchLam _ _ _ _ => true
     end
