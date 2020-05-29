@@ -61,8 +61,7 @@
 %formal
 \begin{abstract}
   %%% https://plg.uwaterloo.capaper/~migod/research/beckOOPSLA.html
-  \todo[inline]{In orange boxes I put short descriptions of parts that I am yet to write, or on the margin comments and questions}
-  \todo[inline]{write abstract at the end}
+The pattern matching on code from the new macro system of Scala 3 is modelled by a calculus with staging. We present a mechanized proof in Coq of soundness of that calculus.
 %
 %\keywords{Attendance System  \and Parameter tampering \and Exploit discovery.}
 \end{abstract}
@@ -70,7 +69,7 @@
 %
 \section{Introduction}
 
-Scala 3 is getting a new macro system based on staged computation \cite{dottydoc} which also supports pattern matching over code values. The theory behind this addition is described in \textit{Quoted Pattern Matching in Scala 3} paper \cite{QPM}. 
+Scala 3 is getting a new macro system based on staged computation \cite{dottydocMacro} which also supports pattern matching over code values. The theory behind this addition is described in \textit{Quoted Pattern Matching in Scala 3} paper \cite{QPM}. 
 
 For example, one can quote an expression and pattern match over it to transform it \footnote{Example from \cite{QPM}}
 \begin{verbatim}
@@ -81,10 +80,12 @@ case '{ println($x)) } =>
   // the generated code will print: "Result of 1+2: 3"
 \end{verbatim}
 
-The paper introduces $\lambda^{\RIGHTcircle}$ calculus that extends the STLC with quotes, splices and pattern matching over quoted code values. In this semester project we create mechanized proofs of soundness of that calculus, based on the paper proofs in the original paper. The proofs consist of 561 lines of Coq code,
+The paper introduces $\lambda^{\RIGHTcircle}$ calculus that extends the STLC with quotes, splices and pattern matching over quoted code values. 
+
+The goal of this semester project, supervised by Fengyun Liu and Nicolas Stucki, was to create mechanized proofs of soundness of that calculus, based on the paper proofs in the original paper. The proofs consist of 561 lines of Coq code,
 the calculus with its rules is defined in 448 lines.
 
-In section 1 we describe ... \todo{TODO etc.}
+In section 2 we describe the $\lambda^{\RIGHTcircle}$ calculus in more details. In section 3 we describe how we formalize it in Coq. In section 4 we explain the mechanized proofs, focusing on some more interesting details. In section 5 we discuss the choice of helper libraries for handling variable binding and some other good practices that we learnt from the project. In section 6 we summarize our contributions.
 
 \section{$\lambda^{\RIGHTcircle}$ calculus}
 
@@ -136,7 +137,7 @@ For example, when reducing $(\lambda. \, \lambda. \, \#1) \; (\lambda. \, \#2)$,
 \subsubsection{DbLib}
 
 As handling variable binding is common to nearly all calculi formalizations, there are some Coq libraries that help automating parts of reasoning about them. In this project we are using the DbLib library \cite{dblib}, the reasons for choosing it are discussed in section \ref{binderlibs}.
-
+\label{traverse}
 When using DbLib we freely define our syntactic forms as some inductive type. We have two types - typed terms (\texttt{typedterm}) and untyped terms (\texttt{term}), and we can substitute an untyped term into both of these types. To use the automation facilities provided by the library, we need to define:
 \begin{itemize}
   \item an instance of \texttt{Var} typeclass which is used for constructing variables - it requires a function \texttt{var} that takes a De Bruijn index (which is simply a natural number) and returns an instance of the type that we will be substituting (in our case \texttt{term}); for us the instance is just calling the constructor \texttt{var x = Var x}
@@ -214,12 +215,15 @@ However in the library that we use, the \texttt{traverse} function is defined in
 Instead, we replace the raw De Bruijn index in \texttt{MatchVar} with an arbitrary term. This satisfies all the constraints required by the library and ensures that this index is updated when necessary. Unfortunately this also allows for ill-formed terms, where we do variable match over something other than a variable. This issue is however addressed in the typing rules - only instances of \texttt{MatchVar} in which \texttt{x} has the form \texttt{VAR y} are accepted. Thus, when we prove Preservation, we also prove that this variable is never substituted for (as the term resulting from such substitution would be ill-typed).
 
 \subsection{Final form of the encoding}
+\label{finalformencoding}
 Most of syntactic details have already been described in the previous section.
 
 Another important change from the paper version is the typing environment. On paper it is defined as a (partial) mapping from variable names to types and levels.
 DbLib is also providing support for using environments with De Bruijn indices, so we used the approach suggested by the library authors - our environment is a list of options - such a list of options can be understood as a partial mapping from natural numbers and it integrates very well with operations on DeBruijn indices. For example when the environment is extended while going inside a binder, the new type is just prepended to the list - this both handles the new type and the fact that other indices are shifted.
 
 We yet had to consider how to handle the levels in the typing environment. One possible solution could be to have a separate environment for both levels - so our \texttt{TypEnv} type would be \texttt{list (option type) * list (option type)}. However binders do not distinguish the levels that they bind, so this approach wouldn't work. Instead we store the level alongside the type in the mapping - so our \texttt{TypEnv} type is \texttt{list (option (level * type))}. The judgement from the original paper $\Gamma(x^i) = T$ is expressed as \texttt{lookup $x$ $\Gamma$ = Some (L$i$, $T$)}.
+
+Extending the environment, ie. $\Gamma; x^i : T$ is expressed as \verb|insert x (Li, T) |$\Gamma$, where the new \verb|x| is the De Bruijn index corresponding to $x$. In the typing rules we only extend the environment by introducing a new binder which is the closest binder now (ie. its index will be 0) and all the other binder's indices are shifted by 1. This operation is expressed by \verb|insert 0 (Li, T) |$\Gamma$.
 
 The typing judgement is defined as an inductive type \texttt{TypEnv $\to$ Level $\to$ typedterm $\to$ type $\to$ Prop} and the small-step semantics relation is defined as \texttt{Level $\to$ typedterm $\to$ typedterm $\to$ Prop}. 
 
@@ -258,59 +262,153 @@ Theorem Preservation : forall t1 T G L,
   G $\vdash$(L) t2 $\in$ T.
 \end{lstlisting}
 
-We have approached the proofs by first trying to prove a subset of the calculus corresponding to STLC, as a warmup. Then we have added quotes, splices and lift and fixed the proofs. Later we have added the pattern matching and at the very end the fixpoint operator. Adding the features step-by-step required rewritting a substantial part of the proofs and sometimes even reformulating some basic definitions. But it also helped to keep the scope more manageable by dividing the proving effort into smaller pieces. The progressive approach also helped me learn piece-by-piece and better understand the paper proofs that I've been basing on.
+We have approached the proofs by first trying to prove a subset of the calculus corresponding to STLC, as a warm-up. Then we have added quotes, splices and lift and fixed the proofs. Later we have added the pattern matching and at the very end the fixpoint operator. Adding the features step-by-step required rewriting a substantial part of the proofs and sometimes even reformulating some basic definitions. But it also helped to keep the scope more manageable by dividing the proving effort into smaller pieces. The progressive approach also helped me learn piece-by-piece and better understand the paper proofs that I've been basing on.
 
 \subsection{Induction}
 
-\todo[inline]{Explain custom induction principle for mutually recursive}
+As many proofs in programming language theory rely on induction on the structure of the term or the typing judgement, we needed appropriate induction principles.
+
+One of the first challenges was that our definitions of terms and typedterms are mutually inductive. The default induction principles generated by Coq don't take this into account, so induction proofs using them are often too weak (the automatically generated principle doesn't have all the assumptions that are needed for it to be useful).
+
+First we used Coq's \verb|Scheme| directive that allows to define induction principles that are mutually inductive, this already gives us an induction principle that has all the necessary assumptions. However, the induction principles require two properties that we will be proving - one for the typedterm and another for un-typed terms (which is of course expected, because in general we can't derive one from the other for arbitrary mutually inductive types). This is however not too convenient, because when using induction we have just one property we want to prove (usually for typedterms) and coming up with this dual version for un-typed terms for every instance of syntactic induction would be very cumbersome.
+
+So to help with that, we define our own induction principle that combines the two in such a way, that it requires only a property we want to prove for typedterms and extends it to terms by ascribing to them an arbitrary type. We can prove its correctness using the principle automatically generated earlier.
+
+Ascribing the terms with arbitrary types, which essentially means requiring it to hold for all types may sound like a too strong requirement. However in practice, all properties that we prove using this principle contain an assumption that the term is well-typed. Thus if the ascribed type is incorrect, the whole property holds trivially as it follows a false assumption. This is usually solved by the \verb|inversion| tactic on that typing assumption. Moreover we have proven the following lemma:
+\begin{lstlisting}[mathescape=true]
+Lemma AscribedTypeIsCorrect : forall G L t T T',
+  G $\vdash$(L) (t : T) $\in$  T' -> T = T'.
+\end{lstlisting}
+which ensures that the type ascribed has to match the type resulting from the typing derivation.
 
 \subsection{Progress}
 
-\todo[inline]{Explain main challenges and used lemmas}
+The progress theorem in the original proof relied mostly on an auxiliary lemma - \textit{Level Progress}. It is defined in two parts, namely:
+\\
+For any given term $t$, we have:
+\begin{itemize}
+  \item[(1)]  If $\Gamma^{[1]} \vdash^0 t \in T$, then $t$ is a value or  there exists $t'$ such that $t \longrightarrow^0 t'$.
+  \item[(2)] If $\Gamma^{[1]} \vdash^1 t \in T$ and $(\square t) : \square T$ is not a value,  then there exists $t'$ such that $t \longrightarrow^1 t'$.
+\end{itemize}
+Where $\Gamma^{[1]}$ means that the environment only contains level 1 variables.
+
+Unsurprisingly, when proving by induction, each case needs the other. One approach to formulating this in Coq would be to define mutually recursive lemmas using the \verb|Lemma ... with| syntax. This is however quite prone to mistakes, because the fixpoint decreasing check is only done at the end.
+
+Instead we formulate this as a single lemma with a disjunction:
+\begin{lstlisting}[mathescape=true]
+Lemma LevelProgress : forall t G T L,
+  RestrictedLevel G L1 ->
+  G $\vdash$(L) t $\in$ T ->
+     (L = L0 /\ (isvalue t \/ exists t', t -->(L0) t')) 
+  \/ (L = L1 /\ (not (isvalue (Quote t : $\square$T)) -> exists t', t -->(L1) t')).
+\end{lstlisting}
+
+This allows us to prove both cases in a single proof relying on syntactic induction on $t$ which thanks to the induction principle defined earlier provides us with all the necessary assumptions.
+
+In that proof, in each case we \verb|destruct L| getting two cases where \verb|L| has a concrete value. In such case, in the inductive hypothesis's conclusion only one of the alternatives is true, so we proved two lemmas that allow us to simplify the inductive hypothesis to contain only the possible alternative.
+
+The \textit{Level Progress} proof is quite long as, beside some trivial cases, each syntactic form required a slightly different treatment. However after proving that lemma, the \textit{Progress} theorem is a very simple corollary.
 
 \subsection{Preservation}
 
-\todo[inline]{Explain main challenges and used lemmas}
+To prove Preservation we need two auxiliary lemmas - \textit{Weakening} and \textit{Substitution}. These are closely related to handling variables in the environment, so they have to be quite deeply modified when translating to De Bruijn indices.
 
+Weakening is originally defined as 
+\\
+If $\Gamma^{[1]} \vdash^i t \in T, x \not\in FV(\Gamma)$, then $\Gamma, x^j : T \vdash^i t \in T$.
 
+The modification is rather intuitive, as explained in section \ref{finalformencoding}, extending the environment is encoded by \verb|insert| and instead of a variable name $x$ we have an index \verb|x|. The fact that $x \not\in FV(\Gamma)$ is encoded by showing the property for \verb|shift x t| which shifts the indices inside of \verb|t| so that the \verb|x|th variable is not bound in that term, and other indices are modified in the same way as they were shifted by the \verb|insert|, so that they still correspond to each other. So it is defined as:
+\begin{lstlisting}[mathescape=true]
+Lemma Weakening: forall G L t T,
+  G $\vdash$(L) t $\in$ T ->
+  forall x L' T' G',
+  insert x (L', T') G = G' ->
+  G' $\vdash$(L) (shift x t) $\in$ T.
+\end{lstlisting}
+It is also important that we split the universal quantification in two parts. The lemma where all of the variables are defined in the first \verb|forall| clause would be equivalent. However when using the default induction principle, we would get too weak inductive hypotheses (because the \verb|x| etc. would be fixed instead of being universally quantified).
+
+\paragraph{}
+
+The Substitution lemma is a bit more complicated than usual:
+\\
+If (1) $\Gamma \vdash^j t_1 \in T_1$, (2) $\Gamma, x^j : T_1 \vdash^i t_2 \in T_2$ and
+(3) $j = 0$ or $t_2$ does not contain pattern matches, then $\Gamma \vdash^i t_2[x \mapsto t_1] \in T_2$.
+
+The first two conditions are as usual, the third one is a bit exceptional but it is necessary for the lemma to be provable.
+The third condition says that we can substitute inside arbitrary terms for variables at level 0, but when substituting a variable at level 1, the term that we are substituting into cannot contain any pattern matches. Without this assumption, we may arrive at a situation when we are substituting a variable inside a pattern matching a particular variable (ie. $(t \sim x \; ? \; t_a \; || \; t_b)[x \mapsto t_c]$), we would get a result that is not even syntactically correct or typable. So we just disallow this kinds of situations (note that the variable pattern only applies to level 1 variables). At first it may seem like a too big restriction, making the lemma too weak. But in fact this is enough, because level 1 substitutions only happen when executing pattern matching and in pattern matches, we only allow to proceed with code values that contain plain terms (ie. terms without quotes, splices and pattern matches).
+
+Once we understand the nuance about the third condition, translating the lemma into Coq is quite simple, so we skip it.
+
+\paragraph{}
+
+The Preservation proof also uses a few more quite obvious auxiliary lemmas to simplify some properties. For example we prove that a plain term doesn't contain pattern matches (which is almost by definition) or that renaming (ie. shifting indices in the De Bruijn formulation) doesn't introduce pattern matches if they weren't present originally. % As in the language's rules we also define a simplified version of substitution lemma that is closer to the notation used in the definitions and is a direct corollary of the main Substitution lemma.
+
+We extensively use the tactics provided by DbLib for dealing with substitutions and define some more tactics specific to our formulation that help simplifying substitutions in the proof context.
 \section{Discussion}
 \subsection{Variable binding libraries}
 \label{binderlibs}
 
-\todo[inline]{explain autosubst and DbLib and mention the multiple binding issue as the reason we switched to DbLib; explain in short the DbLib infrastructure}
+As handling variable binding is a quite complex but very common problem for all programming language formalizations, there are some libraries that help dealing with it. Below we describe three libraries that we approached and our experiences using them.
 
-\todo[inline]{Explain also the Locally Nameless approach} In retrospective I think it \todo{Locally nameless} was best fitting for the project, but I have already chosen DbLib for its simplicity (at the time of choosing the libraries I had too little experience with using DeBruijn indices to properly understand and appreciate the LN approach.) \todo{Move this to discussion}
+\paragraph{}
+
+\textit{autosubst} \cite{autosubst} is quite simple to use. We use special types when defining the syntactic forms: a separate type \verb|var| for the De Bruijn index which is an alias for \verb|nat| but it is tagged so that the library knows this is an index and handles it properly; and a type constructor \verb|bind| that wraps any type, indicating that anything inside it consumes one binder. All properties are derived automatically. A big advantage of this library is that its simplification tactics are quite powerful, at least in our experience they worked out of the box most of the time. It is a very user-friendly and robust solution for simple calculi.
+
+Unfortunately, \textit{autosubst} was too simple for our use-case. In theory it supports having two types of syntax forms, but we had issues with using it. It also only allows binding one variable per syntactic form whereas we need to bind at least two (for \verb|MatchApp|). It may be possible to work around this issue by introducing some dummy syntactic forms.
+
+% It could be possible to work around this issue by introducing an intermediate syntactic form so that \verb|MatchApp| is divided into two forms, ie \verb|MatchApp e T1 T2 es ef| could become \verb|MatchApp1 e T1 T2 (MatchApp2 es) ef| (because \verb|es| is the term that needs to bind two variables). We didn't test if this would work, because before coming up with it we tried a different library, but it would be a rather 'hacky' approach.
+
+\paragraph{}
+
+We chose to use \textit{DbLib} \cite{dblib}. It is a bit harder to start with but is much more flexible. Instead of auto-generating how the binders behave (like \textit{autosubst} did), the user defines the syntactic forms and a \verb|traverse| function which describes how the binders behave (the \verb|traverse| function is described in section \ref{traverse}). This allows for having multiple bindings. The library also supports having multiple syntactic forms, although when using that feature it may be necessary to manually call the tactics that automate derivation of basic properties. For more complex syntactic structures, these tactics failed, so we had to keep the structure quite simple. The tactics for simplifying substitution were a bit less robust than in \textit{autosubst} and sometimes needed some help from the user, but it seems reasonable given that this library allows for more complicated syntax definitions.
+
+\paragraph{}
+
+Another approach worth mentioning is \textit{Locally Nameless} \cite{locallynameless}. It is more of an approach than a library (although the author shares a library with useful tactics). It is a hybrid approach that uses De Bruijn indices for bound variables but uses some arbitrary naming (as one would in a normal programming language) for the free variables (so the syntax needs two forms for variables - one for bound variables and another one for free variables). Using De Bruijn indices for bound variables makes it easier to manually define the substitution operation (whereas in the other libraries it was derived automatically) which is split into two operations - there is one function for substituting free variables and separate one for substituting the first DeBruijn index (which is called \textit{opening} the term). 
+
+It seems to be the most flexible approach but also the most complex one, as the user has to do most of the work and the amount of automation provided by the library is rather limited. It is also based on quite complicated principles (De Bruijn indices are hard to understand on their own and mixing them with normal names makes it even more difficult). It is a good choice for complex calculi for which the other libraries would be too limited.
+
+\paragraph{}
+
+In this project, the choice of the library was quite highly influenced by my level of understanding. I started with \textit{autosubst} which was the simplest one and quite easy to learn, but than it seemed that it imposed some constraints that didn't allow to encode important parts of the calculus (although it may have been possible to work around them with some clever and ugly tricks). Than I tried both \textit{Locally Nameless} and \textit{DbLib}, but at that point \textit{Locally Nameless} was still too hard to understand it to be able to use it. \textit{DbLib} was a nice middle-ground between flexibility and complexity and it still offered decent automation. After using it and understanding better more nuances of using De Bruijn indices, I can appreciate the beauty of \textit{Locally Nameless} approach, but given its limited amount of automation, it is a library best used for more complex calculi.
 
 \subsection{Testing before proving}
 Adding the pattern matching was a very delicate matter, especially as we had to diverge slightly from the original calculus. It was easy to make mistakes in the definitions of types and syntax (for example one of the bugs was having the two variables bound by app in different order in the typing judgement and in the semantics). Such mistakes lead to unprovable theorems, but they may not be easy to notice during proving. To avoid such issues, I decided to write some `unit tests' - I defined simple programs in the calculus that I know should work and tried proving that they do typecheck and evaluate correctly. These proofs were usually rather easy but they helped find lots of simple mistakes. Moreover, they can serve as examples of how to use the calculus in the formalized version which helps understanding.
 
-It seems like a very good approach to write some simple tests (for example lemmas about the desired properties of particular terms) before moving to the general soundness proofs.
+It seems like a very good approach to write some simple tests (for example lemmas about the desired properties of some specific simple terms, like the ones at the end of section \ref{finalformencoding}) before moving on to the general soundness proofs.
 
-\subsection{General remarks on using Coq for mechanizations of calculi}
 
-\todo[inline]{Explain some custom tactics}
-\todo[inline]{Explain why matching goals is so useful and the 'stability' of the proofs, why naming things is important}
 
+\subsection{Proof stability, naming}
+
+Another good practice that I learnt along the way is trying to make the proofs resistant to changes. It is quite common to have to add some additional assumption in one of the definitions or simply extend the calculus with new definitions. If we don't write our proofs carefully, a small modification of the definitions may require us to rewrite most of them, while writing them well may result in not having to change anything.
+
+Firstly, it's good to use as much automation as possible, as it is usually robust to small changes. When introducing hypotheses (with \verb|intro| or \verb|assert|) it is good to give them names, because the automatic naming may very easily change if an additional assumption is added in the future.
+
+In big case-by-case proofs (for example syntactic induction), I usually try to come up with some basic strategy that solves at least the simple goals (using \verb|induction X; try solve [general strategy].|), but in more complex proofs we may still have to manually approach many goals. It is then a good idea when focusing a new goal to write a comment shortly describing the current goal. This helps when by adding some additional rules, the order of the goal changes which may result in applying tactics to wrong goals and very confusing errors. These comments help to quickly catch situations when the current goal is different than would be expected.
+
+I didn't find a way to name hypotheses introduced by calling the \verb|inversion| tactics (which I use extensively), so I still had to deal with the tactics having unpredictable names. It is also problematic when combining tactics. For example in the chain \verb|induction t; inversion H1.|, \verb|H1| may introduce different sets of hypotheses for each case. Sometimes I also want to call \verb|inversion| but the particular hypothesis that I want to examine will be called differently in different branches of a tactic chain similar to the one just mentioned. The solution to these issues is matching the goal - the ability to write tactics that match the current goal or available hypotheses against some patterns. For example we can write:
+\begin{lstlisting}[mathescape=true]
+Ltac invV :=
+  match goal with
+  | H: ?G $\vdash$(L0) ?v $\in$ $\square$(?T) |- _ => inversion H; subst
+  end.
+\end{lstlisting}
+which defines a tactic that finds a hypothesis containing a typing judgement for some quoted type (a $\square T$ for some $T$) and runs \verb|inversion| on this hypothesis. Now we can write \verb|induction t; invV.| and regardless of what that hypothesis would be called, we can find it and inside of \verb|invV| bind its name to \verb|H|. This is a very powerful technique that allows to write very useful tactics.
 
 
 \section{Summary}
 
-Our main contribution is the formalized version of the proof that can be found at \\ \href{https://github.com/radeusgd/QuotedPatternMatchingProof/}{https://github.com/radeusgd/QuotedPatternMatchingProof/}...
-
-
+We have described the $\lambda^{\RIGHTcircle}$ calculus and various challenges concerning formalizing it in Coq and proving its soundness. We discuss some of the available libraries useful in formalizing calculi and some other good practices for proving in Coq. Our main contribution is the mechanized formalization of the calculus along with its soundess proofs that can be found at \href{https://github.com/radeusgd/QuotedPatternMatchingProof/}{https://github.com/radeusgd/QuotedPatternMatchingProof/}.
 
 \bibliographystyle{unsrt}
 \bibliography{bibliography}
 
-\todo[inline]{Handle URL in bibliography}
-\todo[inline]{ Add references}
-\todo[inline]{cite the upcoming QPM paper?}
 
 \section*{Appendix}
 \todo[inline]{appendix with rules}
-\todo[inline]{show the modified typing and semantic rules for the app pattern}
 
-\todo[inline]{ show type and semantic rules for all the changed patterns ? - answer: put them in appendix}
+\todo[inline]{show type and semantic rules for all the changed patterns}
 
 
 
