@@ -322,6 +322,15 @@ Lemma LevelProgress : forall t G T L,
       eexists. eapply E_PatLam_Succ; eauto.
       inversion H4. eauto.
     + inversion H1. eexists. eapply E_PatLam_Red; eauto.
+  - right. (* MatchFix *)
+    inversion H0; subst.
+    eapply IHL0 in IHt1; eauto.
+    destruct IHt1.
+    + prepareMatchProgress; try solve [exists t3; eapply E_PatFix_Fail; eauto; intros; congruence].
+      eexists.
+      eapply E_PatFix_Succ; eauto.
+      inversion H4; eauto.
+    + inversion H1. eexists. eapply E_PatFix_Red; eauto.
 Qed.
 
 Lemma LevelProgress0 : forall G t T,
@@ -403,7 +412,7 @@ Fixpoint ContainsPatternMatch (t : typedterm): bool :=
     | MatchNat _ _ _ _ => true
     | MatchVar _ _ _ _ => true
     | MatchApp _ _ _ _ _ => true
-    | MatchFix _ _ _ _ => true
+    | MatchFix _ _ _ => true
     | MatchUnlift _ _ _ => true
     | MatchLam _ _ _ _ => true
     end
@@ -411,6 +420,13 @@ Fixpoint ContainsPatternMatch (t : typedterm): bool :=
 
 Lemma TrivialOrPattern : forall Li t, (Li = L0) -> ((Li = L0) \/ ContainsPatternMatch t = false).
   auto.
+Qed.
+
+Lemma Permutation : forall L1 T1 x L2 T2 L G t T,
+    insert 0 (L1, T1) (insert x (L2, T2) G) ⊢(L) t ∈ T ->
+    insert (1 + x) (L2, T2) (insert 0 (L1, T1) G) ⊢(L) t ∈ T.
+  intros.
+  eauto.
 Qed.
 
 Lemma Substitution : forall t2 G x Lo Li T1 T2,
@@ -424,9 +440,7 @@ Lemma Substitution : forall t2 G x Lo Li T1 T2,
     intro. subst. trivial.
   - econstructor.
     eapply IHt2.
-    + enough (insert (1 + x) (Li, T1) (insert 0 (Lo, argT) G) = insert 0 (Lo, argT) (insert x (Li, T1) G)) as Hii.
-      rewrite Hii. trivial.
-      insert_insert.
+    + eapply Permutation; eauto.
     + enough ((shift 0 (t1 : T1)) = (shift 0 t1) : T1) as Hss.
       rewrite <- Hss.
       eapply Weakening.
@@ -495,12 +509,17 @@ Lemma Substitution : forall t2 G x Lo Li T1 T2,
     subst.
     econstructor; eauto.
     eapply IHt2_2; auto.
-    + assert (insert 0 (L0, (□ T4) ==> (□ T5)) (insert x (L0, T0) G)
-              =
-              insert (1 + x) (L0, T0) (insert 0 (L0, (□ T4) ==> (□ T5)) G)) as Hii; eauto.
-      rewrite <- Hii.
-      eauto.
+    + eapply Permutation; eauto.
     + assert (shift 0 t1 : T0 = shift 0 (t1 : T0)) as Hss; eauto. (* TODO may want to create a tactic for this shift/lift pumping *)
+      rewrite Hss.
+      eapply Weakening; eauto.
+  - (* MatchFix *)
+    destruct H1; try solve [cbn in *; congruence].
+    subst.
+    econstructor; eauto.
+    eapply IHt2_2; eauto.
+    + eapply Permutation; eauto.
+    + assert (shift 0 t1 : T1 = shift 0 (t1 : T1)) as Hss; eauto.
       rewrite Hss.
       eapply Weakening; eauto.
 Qed.
@@ -622,4 +641,9 @@ Theorem Preservation : forall t1 T G L,
     apply PlainHasNoPatterns in H11.
     cbn in H11.
     erewrite LiftKeepsNoPatterns; eauto.
+  - (* MatchFix *)
+    invStep; eauto.
+    eapply SubstitutionSimple; eauto.
+    inversion H; subst. inversion H7. subst.
+    eauto.
 Qed.

@@ -71,6 +71,11 @@ Inductive typing_judgement : TypEnv -> Level -> typedterm -> type -> Prop :=
     (insert 0 (L0, (□T1) ==> (□T2)) G) ⊢(L0) es ∈ T ->
     G ⊢(L0) ef ∈ T ->
     G ⊢(L0) (MatchLam e (T1 ==> T2) es ef : T) ∈ T
+| T_Pat_Fix : forall G e es ef T T1,
+    G ⊢(L0) e ∈ □(T1) ->
+    (insert 0 (L0, □(T1 ==> T1)) G) ⊢(L0) es ∈ T ->
+    G ⊢(L0) ef ∈ T ->
+    G ⊢(L0) (MatchFix e es ef : T) ∈ T
 where "G '⊢(' L ')' t '∈' T" := (typing_judgement G L t T).
 Hint Constructors typing_judgement.
 

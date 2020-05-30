@@ -43,7 +43,7 @@ with term :=
      | MatchApp (e : typedterm) (T1 T2 : type) (es ef : typedterm) (* T1 is type of the function and T2 is type of it's argument, so if you want to deconstruct an application of the form (f 2) you should set T1 = TNat -> ?T and T2 = ?T, this may be a little counterintuitive but it is made in such a way to reflect the original calculus where you would use the app pattern nested with a bind, like so: PatApp (PatBind[TNat -> ?T] f) (PatBind[TNat] arg) *)
      | MatchUnlift (e : typedterm) (es ef : typedterm)
      | MatchLam (e : typedterm) (T : type) (es ef : typedterm)
-     | MatchFix (e : typedterm) (T : type) (es ef : typedterm)
+     | MatchFix (e : typedterm) (es ef : typedterm)
 .
 
 (* Definition RemoveType (tt : typedterm) : term := match tt with *)
@@ -79,8 +79,8 @@ with traverse_term f l u :=
          MatchUnlift (traverse_typedterm f l e) (traverse_typedterm f (1 + l) es) (traverse_typedterm f l ef)
        | MatchLam e T1 es ef =>
          MatchLam (traverse_typedterm f l e) T1 (traverse_typedterm f (1 + l) es) (traverse_typedterm f l ef)
-       | MatchFix e T1 es ef =>
-         MatchFix (traverse_typedterm f l e) T1 (traverse_typedterm f (1 + l) es) (traverse_typedterm f l ef)
+       | MatchFix e es ef =>
+         MatchFix (traverse_typedterm f l e) (traverse_typedterm f (1 + l) es) (traverse_typedterm f l ef)
        end.
 
 Instance Traverse_t_tt : Traverse term typedterm := {
@@ -222,7 +222,7 @@ Lemma syntactic :
     (forall (e s f : typedterm) (T1 T2 : type), P e -> P s -> P f -> forall T : type, P (MatchApp e T1 T2 s f : T)) ->
     (forall (e s f : typedterm), P e -> P s -> P f -> forall T : type, P (MatchUnlift e s f : T)) ->
     (forall (e s f : typedterm) (T1 : type), P e -> P s -> P f -> forall T : type, P (MatchLam e T1 s f : T)) ->
-    (forall (e s f : typedterm) (T1 : type), P e -> P s -> P f -> forall T : type, P (MatchFix e T1 s f : T)) ->
+    (forall (e s f : typedterm), P e -> P s -> P f -> forall T : type, P (MatchFix e s f : T)) ->
 
     forall t : typedterm, P t
 .

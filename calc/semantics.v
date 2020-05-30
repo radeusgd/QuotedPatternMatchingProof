@@ -154,6 +154,20 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
     (forall T1 T2 body, t <> (Lam T1 body : T1 ==> T2)) ->
     isplain t ->
     (MatchLam t' T3 s f : T) -->(L0) f
+| E_PatFix_Succ : forall t t' T1 fixpoint T s s' f,
+    t' = (Quote t : □T1) ->
+    t = (Fix fixpoint : T1) ->
+    isplain t ->
+    s' = s.[Quote fixpoint : □(T1 ==> T1)/] ->
+    (MatchFix t' s f : T) -->(L0) s'
+| E_PatFix_Red : forall t t' T s f,
+    t -->(L0) t' ->
+    (MatchFix t s f : T) -->(L0) (MatchFix t' s f : T)
+| E_PatFix_Fail : forall t t' T1 T s f,
+    t' = (Quote t : □T1) ->
+    (forall fixp, t <> (Fix fixp : T1)) ->
+    isplain t ->
+    (MatchFix t' s f : T) -->(L0) f
 | E_App1 : forall L t1 t2 t1' T, t1 -->(L) t1' -> (App t1 t2 : T) -->(L) (App t1' t2 : T)
 | E_App2 : forall L t1 t2 t2' T, t2 -->(L) t2' -> (App t1 t2 : T) -->(L) (App t1 t2' : T)
 | E_Abs : forall t t' T1 T,

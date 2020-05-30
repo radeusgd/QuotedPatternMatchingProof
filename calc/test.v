@@ -425,3 +425,15 @@ Lemma LoopDiverges : Loop -->(L0) Loop.
   simpl_subst_all.
   auto.
 Qed.
+
+Definition FixMatch := (MatchFix (Quote Loop : □TNat) (const 1) (const 0) : TNat).
+
+Lemma FixMatchTypes : ∅ ⊢(L0) FixMatch ∈ TNat.
+  cbv.
+  repeat econstructor.
+Qed.
+
+Lemma FixMatchSucceeds : FixMatch -->(L0) const 1.
+  cbv.
+  repeat econstructor.
+Qed.

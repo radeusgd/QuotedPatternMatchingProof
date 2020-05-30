@@ -18,7 +18,8 @@
 \usepackage{todonotes}
 \usepackage{wasysym} % lambda circle symbol
 %\usepackage{languages}
-%\usepackage{bcprules}     % typeset inference rule
+\usepackage{bcprules}     % typeset inference rule
+\usepackage{framed}
 
 %\newtheorem*{theorem-no-num}{Theorem}
 
@@ -406,10 +407,149 @@ We have described the $\lambda^{\RIGHTcircle}$ calculus and various challenges c
 
 
 \section*{Appendix}
-\todo[inline]{appendix with rules}
 
-\todo[inline]{show type and semantic rules for all the changed patterns}
+\newcommand{\quoted}[1]{\Box\;#1}
+\newcommand{\lift}[1]{\texttt{lift}\;#1}
+\newcommand{\qtype}[1]{\Box#1}
+\newcommand{\splice}[1]{\$\;#1}
+\newcommand{\fix}[1]{\texttt{fix}\;#1}
+\newcommand{\app}[2]{#1\;#2}
+\newcommand{\tpd}[2]{{#1}{:}{#2}}
 
+\newcommand{\patnat}[1]{#1}
+\newcommand{\patapp}[2]{#1\;#2}
+\newcommand{\patref}[1]{#1}
+\newcommand{\patunlift}[1]{\texttt{unlift}\;#1}
+\newcommand{\patbind}[2]{\texttt{bind}[#2]\;#1}
+\newcommand{\patlam}[2]{\texttt{lam}[#2]\;#1}
+\newcommand{\patfix}[1]{\texttt{fix}\;#1}
+
+\newcommand{\patmat}[4]{\patmatSP{#1}{#2}\patmatThen{#3}#4}
+\newcommand{\patmatSP}[2]{#1 \sim #2\;?}
+\newcommand{\patmatThen}[1]{\;#1\; \| \;}
+
+\newcommand{\lam}[3]{\lambda#1{:}#2.#3}
+
+\newcommand{\strip}[1]{|#1|}
+
+
+To simplify the proofs, we remove nested patterns leaving only simpler non-nested pattern matching. This requires changing some typing and semantic rules.
+
+As we use De Bruijn indices, the rules in the formalization look slightly different. For readability we present them in similar style to the original, so we introduce names for bound variables and add them in the syntax of the pattern matches. $b_0$ stands for the introduced variable name that corresponds to the most closely bound De Bruijn index and $b_1$ stands for the next index.
+
+As we have separate syntactic forms for each pattern, we remove the general \textsc{T-Pat} rule and its helper pattern typing rules and replace them with the following rules:
+\begin{figure}[h]
+\centering
+\begin{framed}
+    
+    \textbf{Explicitly-typed Terms Typing (added rules)} \hfill \framebox[1.2\width][r]{$\Gamma \vdash^i t \in T$}
+
+    \infrule[T-Pat-Nat]
+{
+  \Gamma \vdash^0 t_1 \in \qtype{Nat} \andalso
+  \Gamma \vdash^0 t_2 \in T \andalso
+  \Gamma \vdash^0 t_3 \in T
+}
+{ \Gamma \vdash^0 \tpd{(\texttt{MatchNat} \; t_1 \; n \; t_2 \; t_3)}{T} \;\in\; T  }
+
+\vspace{1mm}
+
+\infrule[T-Pat-Var]
+{
+  \Gamma \vdash^0 t_1 \in \qtype{T_1} \andalso
+  \Gamma(x^1) = T_1 \andalso
+  \Gamma \vdash^0 t_2 \in T \andalso
+  \Gamma \vdash^0 t_3 \in T
+}
+{ \Gamma \vdash^0 \tpd{(\texttt{MatchVar} \; t_1 \; x \; t_2 \; t_3)}{T} \;\in\; T  }
+
+\vspace{1mm}
+
+\infrule[T-Pat-App]
+{
+  \Gamma \vdash^0 t_1 \in \qtype{T_2} \andalso
+  \Gamma; \, b_1^0 : \qtype{(T_1 \to T_2)}; \, b_0^0 : \qtype{T_1} \vdash^0 t_2 \in T \andalso
+  \Gamma \vdash^0 t_3 \in T
+}
+{ \Gamma \vdash^0 \tpd{(\texttt{MatchApp} \; t_1 \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} \;\in\; T  }
+
+\vspace{1mm}
+
+\infrule[T-Pat-Unlift]
+{
+  \Gamma \vdash^0 t_1 \in \qtype{Nat} \andalso
+  \Gamma; \, b_0^0 : Nat \vdash^0 t_2 \in T \andalso
+  \Gamma \vdash^0 t_3 \in T
+}
+{ \Gamma \vdash^0 \tpd{(\texttt{MatchUnlift} \; t_1 \; b_0 \; t_2 \; t_3)}{T} \;\in\; T  }
+
+\vspace{1mm}
+
+\infrule[T-Pat-Lam]
+{
+  \Gamma \vdash^0 t_1 \in \qtype{T_1 \to T_2} \andalso
+  \Gamma; \, b_0^0 : \qtype{T_1} \to \qtype{T_2} \vdash^0 t_2 \in T \andalso
+  \Gamma \vdash^0 t_3 \in T
+}
+{ \Gamma \vdash^0 \tpd{(\texttt{MatchLam} \; t_1 \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3)}{T} \;\in\; T  }
+
+
+\end{framed}
+\caption{Explicitly-typed Terms Typing (added rules)}
+\label{fig:pattern-type-system}
+\end{figure}
+
+
+
+Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc{E-Pat} for each pattern as they are separate syntactic forms. This however makes the \textit{match} function obsolete, as all matching rules are directly expressed by these separate rules.
+
+\begin{figure}[h]
+  \centering
+  \begin{framed}
+  
+\infrule[E-PatNat-Red]
+{ t_1 \longrightarrow^0 t_1'}
+{ \tpd{(\texttt{MatchNat} \; t_1 \; n \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchNat} \; t_1' \; n \; t_2 \; t_3)}{T} }
+\vspace{1mm}
+
+\infax[E-PatNat-Succ]
+{ \tpd{(\texttt{MatchNat} \; \tpd{(\quoted{n})}{\qtype{Nat}} \; n \; t_2 \; t_3)}{T} \longrightarrow^0 t_2 }
+
+\vspace{1mm}
+
+\infrule[E-PatVar-Red]
+{ t_1 \longrightarrow^0 t_1'}
+{ \tpd{(\texttt{MatchVar} \; t_1 \; x \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchVar} \; t_1' \; x \; t_2 \; t_3)}{T} }
+
+\vspace{1mm}
+
+\infrule[E-PatApp-Red]
+{ t_1 \longrightarrow^0 t_1'}
+{ \tpd{(\texttt{MatchApp} \; t_1 \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchApp} \; t_1' \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} }
+
+\vspace{1mm}
+
+\infrule[E-PatUnlift-Red]
+{ t_1 \longrightarrow^0 t_1'}
+{ \tpd{(\texttt{MatchUnlift} \; t_1 \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchUnlift} \; t_1' \; b_0 \; t_2 \; t_3)}{T} }
+
+\vspace{1mm}
+
+\infrule[E-PatLam-Red]
+{ t_1 \longrightarrow^0 t_1'}
+{ \tpd{(\texttt{MatchLam} \; t_1 \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchLam} \; t_1' \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3)}{T} }
+
+\vspace{1mm}
+
+\infrule[E-Pat-Fail]
+{ TODO }
+{ \tpd{(\texttt{MatchNat} \; t_1 \; n \; t_2 \; t_3)}{T} \longrightarrow^0 t_2 }
+
+  
+  \end{framed}
+  \caption{Small-step operational semantics (added rules)}
+  \label{fig:pattern-semantics}
+\end{figure}
 
 
 \end{document}
