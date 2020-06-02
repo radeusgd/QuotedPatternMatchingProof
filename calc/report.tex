@@ -493,6 +493,15 @@ As we have separate syntactic forms for each pattern, we remove the general \tex
 }
 { \Gamma \vdash^0 \tpd{(\texttt{MatchLam} \; t_1 \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3)}{T} \;\in\; T  }
 
+\vspace{1mm}
+
+\infrule[T-Pat-Fix]
+{
+  \Gamma \vdash^0 t_1 \in \qtype{T_1} \andalso
+  \Gamma; \, b_0^0 : \qtype{(T_1 \to T_1)} \vdash^0 t_2 \in T \andalso
+  \Gamma \vdash^0 t_3 \in T
+}
+{ \Gamma \vdash^0 \tpd{(\texttt{MatchFix} \; t_1 \; b_0 \; t_2 \; t_3)}{T} \;\in\; T  }
 
 \end{framed}
 \caption{Explicitly-typed Terms Typing (added rules)}
@@ -508,42 +517,84 @@ Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc
   \begin{framed}
   
 \infrule[E-PatNat-Red]
-{ t_1 \longrightarrow^0 t_1'}
-{ \tpd{(\texttt{MatchNat} \; t_1 \; n \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchNat} \; t_1' \; n \; t_2 \; t_3)}{T} }
-\vspace{1mm}
+{ t \longrightarrow^0 t'}
+{ \tpd{(\texttt{MatchNat} \; t \; n \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchNat} \; t' \; n \; t_2 \; t_3)}{T} }
 
 \infax[E-PatNat-Succ]
 { \tpd{(\texttt{MatchNat} \; \tpd{(\quoted{n})}{\qtype{Nat}} \; n \; t_2 \; t_3)}{T} \longrightarrow^0 t_2 }
 
+\infrule[E-PatNat-Fail]
+{ t \not= n \andalso t \text{ is plain} }
+{ \tpd{(\texttt{MatchNat} \; \tpd{(\quoted{t})}{\qtype{Nat}} \; n \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
+
 \vspace{1mm}
 
 \infrule[E-PatVar-Red]
-{ t_1 \longrightarrow^0 t_1'}
-{ \tpd{(\texttt{MatchVar} \; t_1 \; x \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchVar} \; t_1' \; x \; t_2 \; t_3)}{T} }
+{ t \longrightarrow^0 t' }
+{ \tpd{(\texttt{MatchVar} \; t \; x \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchVar} \; t' \; x \; t_2 \; t_3)}{T} }
+
+\infax[E-PatVar-Succ]
+{ \tpd{(\texttt{MatchVar} \; \tpd{(\quoted{x})}{\qtype{T_1}} \; x \; t_2 \; t_3)}{T} \longrightarrow^0 t_2 }
+
+\infrule[E-PatVar-Fail]
+{ t \not= x \andalso t \text{ is plain} }
+{ \tpd{(\texttt{MatchVar} \; \tpd{(\quoted{x})}{\qtype{T_1}} \; x \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
 
 \vspace{1mm}
 
 \infrule[E-PatApp-Red]
-{ t_1 \longrightarrow^0 t_1'}
-{ \tpd{(\texttt{MatchApp} \; t_1 \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchApp} \; t_1' \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} }
+{ t \longrightarrow^0 t'}
+{ \tpd{(\texttt{MatchApp} \; t \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchApp} \; t' \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} }
+
+\infrule[E-PatApp-Succ]
+{ t = (e_1 \; e_2) \andalso t \text{ is plain} }
+{ \tpd{(\texttt{MatchApp} \; \tpd{(\quoted{t})}{\qtype{T_3}} \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto \quoted{e_2}][b_1 \mapsto \quoted{e_1}] }
+
+\infrule[E-PatApp-Fail]
+{ t \text{ is not an application} \andalso t \text{ is plain} }
+{ \tpd{(\texttt{MatchApp} \; \tpd{(\quoted{t})}{\qtype{T_3}} \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
+
 
 \vspace{1mm}
 
 \infrule[E-PatUnlift-Red]
-{ t_1 \longrightarrow^0 t_1'}
-{ \tpd{(\texttt{MatchUnlift} \; t_1 \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchUnlift} \; t_1' \; b_0 \; t_2 \; t_3)}{T} }
+{ t \longrightarrow^0 t'}
+{ \tpd{(\texttt{MatchUnlift} \; t \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchUnlift} \; t' \; b_0 \; t_2 \; t_3)}{T} }
+
+\infax[E-PatUnlift-Succ]
+{ \tpd{(\texttt{MatchUnlift} \; \tpd{(\quoted{n})}{\qtype{Nat}} \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto n] }
+
+\infrule[E-PatUnlift-Fail]
+{ t \text{ is not a number} \andalso t \text{ is plain} }
+{ \tpd{(\texttt{MatchUnlift} \; \tpd{(\quoted{t})}{\qtype{T_1}} \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
 
 \vspace{1mm}
 
 \infrule[E-PatLam-Red]
-{ t_1 \longrightarrow^0 t_1'}
-{ \tpd{(\texttt{MatchLam} \; t_1 \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchLam} \; t_1' \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3)}{T} }
+{ t \longrightarrow^0 t'}
+{ \tpd{(\texttt{MatchLam} \; t \; T_1 \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchLam} \; t' \; T_1 \; b_0 \; t_2 \; t_3)}{T} }
+
+\infrule[E-PatLam-Succ]
+{ t = \lam{x}{T_1}{e} \andalso t \text{ is plain} \andalso x' \text{ is not bound anywhere in } t }
+{ \tpd{(\texttt{MatchLam} \; \tpd{(\quoted{t})}{\qtype{(T_1 \to T_2)}} \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto \lam{x'}{\qtype{T_1}}{\quoted{e[x \mapsto \splice{x'}]}}] }
+
+\infrule[E-PatLam-Fail]
+{ t \text{ is not a lambda expression} \andalso t \text{ is plain} }
+{ \tpd{(\texttt{MatchLam} \; \tpd{(\quoted{t})}{\qtype{T_1 \to T_2}} \; T_1 \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
 
 \vspace{1mm}
 
-\infrule[E-Pat-Fail]
-{ TODO }
-{ \tpd{(\texttt{MatchNat} \; t_1 \; n \; t_2 \; t_3)}{T} \longrightarrow^0 t_2 }
+\infrule[E-PatFix-Red]
+{ t \longrightarrow^0 t'}
+{ \tpd{(\texttt{MatchFix} \; t \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchFix} \; t' \; b_0 \; t_2 \; t_3)}{T} }
+
+\infrule[E-PatFix-Succ]
+{ t = \fix{e} \andalso t \text{ is plain} }
+{ \tpd{(\texttt{MatchFix} \; \tpd{(\quoted{t})}{\qtype{T_1}} \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto \quoted{e}] }
+
+\infrule[E-PatFix-Fail]
+{ t \text{ is not a fix expression} \andalso t \text{ is plain} }
+{ \tpd{(\texttt{MatchFix} \; \tpd{(\quoted{t})}{\qtype{T_1}} \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
 
   
   \end{framed}

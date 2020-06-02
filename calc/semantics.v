@@ -88,7 +88,6 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 | E_PatNat_Succ : forall n t t' T s f,
     t' = (Quote t : □TNat) ->
     t = (Nat n : TNat) ->
-    isplain t ->
     (MatchNat t' n s f : T) -->(L0) s
 | E_PatNat_Red : forall t t' n T s f,
     t -->(L0) t' ->
@@ -101,7 +100,6 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 | E_PatVar_Succ : forall x t t' T1 T s f,
     t' = (Quote t : □T1) ->
     t = (VAR x : T1) ->
-    isplain t ->
     (MatchVar t' (VAR x) s f : T) -->(L0) s
 | E_PatVar_Red : forall t t' x T s f,
     t -->(L0) t' ->
@@ -128,7 +126,6 @@ Inductive reducts : Level -> typedterm -> typedterm -> Prop :=
 | E_PatUnlift_Succ : forall t t' n T s s' f,
     t' = (Quote t : □TNat) ->
     t = (Nat n : TNat) ->
-    isplain t ->
     s' = s.[Nat n : TNat/] ->
     (MatchUnlift t' s f : T) -->(L0) s'
 | E_PatUnlift_Red : forall t t' T s f,

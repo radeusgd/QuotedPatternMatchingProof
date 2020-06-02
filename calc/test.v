@@ -47,7 +47,7 @@ Lemma UnliftConstantWrongEvaluationNotPossible : ~(UnliftConstant -->(L0) (const
   cbv in *.
   inversion H.
   subst.
-  inversion H8. simpl_subst_all. subst.
+  inversion H7. simpl_subst_all. subst.
   inversion H4.
   subst. inversion H4. subst.
   eapply H6.
