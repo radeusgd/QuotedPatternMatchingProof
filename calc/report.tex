@@ -19,6 +19,8 @@
 \usepackage{wasysym} % lambda circle symbol
 %\usepackage{languages}
 \usepackage{bcprules}     % typeset inference rule
+\usepackage{multicol}     % multi-column
+
 \usepackage{framed}
 
 %\newtheorem*{theorem-no-num}{Theorem}
@@ -81,14 +83,14 @@ case '{ println($x)) } =>
   // the generated code will print: "Result of 1+2: 3"
 \end{verbatim}
 
-The paper introduces $\lambda^{\RIGHTcircle}$ calculus that extends the STLC with quotes, splices and pattern matching over quoted code values. 
+The paper introduces $\lambda^{\RIGHTcircle}$ calculus that extends the STLC with quotes, splices and pattern matching over quoted code values. The calculus is explained in more detail in section \ref{sec:calculus}.
 
-The goal of this semester project, supervised by Fengyun Liu and Nicolas Stucki, was to create mechanized proofs of soundness of that calculus, based on the paper proofs in the original paper. The proofs consist of 561 lines of Coq code,
-the calculus with its rules is defined in 448 lines.
+The goal of this semester project was to create mechanized proofs of soundness of that calculus, based on the paper proofs in the original paper. The project consists of 1366, of which 585 are the proofs and 455 are definitions. The definitions are explained in section \ref{sec:definitions} and the proofs in section \ref{sec:proving}.
 
-In section 2 we describe the $\lambda^{\RIGHTcircle}$ calculus in more details. In section 3 we describe how we formalize it in Coq. In section 4 we explain the mechanized proofs, focusing on some more interesting details. In section 5 we discuss the choice of helper libraries for handling variable binding and some other good practices that we learnt from the project. In section 6 we summarize our contributions.
+While working on the proofs we had to solve some problems that may be useful in other works. We discuss these in section \ref{sec:discussion}.
 
 \section{$\lambda^{\RIGHTcircle}$ calculus}
+\label{sec:calculus}
 
 The system is formalized in two parts - there is an \textit{implicitly-typed} language that is then elaborated to an \textit{explicitly-typed} variant in which every term is ascribed with its type. The ascribed types are used as evidence in the operational semantics.
 
@@ -113,12 +115,13 @@ Below is an example of a term in the calculus, implementing a function that matc
 
 This term will reduce to a code value with the same function but applied to the different argument: $\square((\lambda x: Nat. \; x) \; 42)$.
 
-\section{Encoding the calculus in Coq}
-We encode the \textit{explicitly-typed} variant of the calculus, as the safety properties are defined for it.
+\section{Definitions in Coq}
+\label{sec:definitions}
+We define the \textit{explicitly-typed} variant of the calculus, as the safety properties are defined for it and the elaboration rules are quite simple.
 
-Encoding the calculus required some simplifications to be able to express it in Coq in a reasonable way. We tried to only allow simplifications that don't limit the expressivity of the language, they are mostly changing the syntax and simplifying some constructs, but most of the simplifications could be handled with some form of rewriting.
+Defining the calculus in Coq required some simplifications to be able to express it in a reasonable way. We tried to only allow simplifications that don't limit the expressivity of the language - they are mostly changing the syntax and simplifying some constructs. Most of the simplifications could be handled with some form of syntactic rewriting.
 
-\subsection{Encoding variable binding}
+\subsection{Defining variable binding}
 
 Variable binding is a common issue that is encountered in all projects that try mechanizing proofs about calculi. 
 
@@ -148,9 +151,9 @@ Afterwards some lemmas have to be proven to show that the \texttt{traverse} func
 
 Once this is defined, substitution, shift etc. are automatically derived by using the \texttt{traverse} function.
 
-\subsection{Encoding patterns}
+\subsection{Defining patterns}
 
-Encoding patterns is particularly complicated as the patterns can be arbitrarily nested, so a pattern match could introduce an arbitrary amount of bindings. This is possible to handle, but is much harder to reason about. To simplify the reasoning, we forbid nested patterns. This does not limit the expressivity of the calculus as any nested pattern match can be converted to a series of non-nested patterns.
+Defining patterns is particularly complicated as the patterns can be arbitrarily nested, so a pattern match could introduce an arbitrary amount of bindings. This is possible to handle, but is much harder to reason about. To simplify the reasoning, we forbid nested patterns. This does not limit the expressivity of the calculus as any nested pattern match can be converted to a series of non-nested patterns.
 
 For example, we can convert 
 \[
@@ -164,7 +167,7 @@ After simplifying to non-nested patterns, the \texttt{bind} pattern is not usefu
 
 Even after the simplification, the App pattern still introduces two variable bindings, so we need to be able to support it. This is still much simpler than the arbitrary amount of bindigs that we started with.
 
-We first tried to encode the patterns as a separate inductive definition and have a single syntactic form for the pattern matching:
+We first tried to define the patterns as a separate inductive definition and have a single syntactic form for the pattern matching:
 \begin{verbatim}
 Inductive pattrn :=
 | PNat (n : nat)
@@ -215,7 +218,7 @@ However in the library that we use, the \texttt{traverse} function is defined in
 
 Instead, we replace the raw De Bruijn index in \texttt{MatchVar} with an arbitrary term. This satisfies all the constraints required by the library and ensures that this index is updated when necessary. Unfortunately this also allows for ill-formed terms, where we do variable match over something other than a variable. This issue is however addressed in the typing rules - only instances of \texttt{MatchVar} in which \texttt{x} has the form \texttt{VAR y} are accepted. Thus, when we prove Preservation, we also prove that this variable is never substituted for (as the term resulting from such substitution would be ill-typed).
 
-\subsection{Final form of the encoding}
+\subsection{Final form of the definitions}
 \label{finalformencoding}
 Most of syntactic details have already been described in the previous section.
 
@@ -246,6 +249,7 @@ Qed.
 
 
 \section{Proving soundness}
+\label{sec:proving}
 We want to prove Progress: If $\emptyset \vdash^0 t \in T$, then $t$ is a value or there exists $t'$ such $t \longrightarrow^0 t'$
 \\
 and Preservation: If $\Gamma \vdash^i t \in T$ and $t \longrightarrow^i t'$, then $\Gamma \vdash^i t' \in T$.
@@ -318,7 +322,7 @@ Weakening is originally defined as
 \\
 If $\Gamma^{[1]} \vdash^i t \in T, x \not\in FV(\Gamma)$, then $\Gamma, x^j : T \vdash^i t \in T$.
 
-The modification is rather intuitive, as explained in section \ref{finalformencoding}, extending the environment is encoded by \verb|insert| and instead of a variable name $x$ we have an index \verb|x|. The fact that $x \not\in FV(\Gamma)$ is encoded by showing the property for \verb|shift x t| which shifts the indices inside of \verb|t| so that the \verb|x|th variable is not bound in that term, and other indices are modified in the same way as they were shifted by the \verb|insert|, so that they still correspond to each other. So it is defined as:
+The modification is rather intuitive, as explained in section \ref{finalformencoding}, extending the environment is defined using \verb|insert| and instead of a variable name $x$ we have an index \verb|x|. The fact that $x \not\in FV(\Gamma)$ is expressed by showing the property for \verb|shift x t| which shifts the indices inside of \verb|t| so that the \verb|x|th variable is not bound in that term, and other indices are modified in the same way as they were shifted by the \verb|insert|, so that they still correspond to each other. So it is defined as:
 \begin{lstlisting}[mathescape=true]
 Lemma Weakening: forall G L t T,
   G $\vdash$(L) t $\in$ T ->
@@ -346,6 +350,12 @@ The Preservation proof also uses a few more quite obvious auxiliary lemmas to si
 
 We extensively use the tactics provided by DbLib for dealing with substitutions and define some more tactics specific to our formulation that help simplifying substitutions in the proof context.
 \section{Discussion}
+\label{sec:discussion}
+\subsection{Multiple binders at once}
+\label{multibind}
+
+\todo[inline]{TODO: describe 2 binders in App issue}
+
 \subsection{Variable binding libraries}
 \label{binderlibs}
 
@@ -371,7 +381,7 @@ It seems to be the most flexible approach but also the most complex one, as the 
 
 \paragraph{}
 
-In this project, the choice of the library was quite highly influenced by my level of understanding. I started with \textit{autosubst} which was the simplest one and quite easy to learn, but than it seemed that it imposed some constraints that didn't allow to encode important parts of the calculus (although it may have been possible to work around them with some clever and ugly tricks). Than I tried both \textit{Locally Nameless} and \textit{DbLib}, but at that point \textit{Locally Nameless} was still too hard to understand it to be able to use it. \textit{DbLib} was a nice middle-ground between flexibility and complexity and it still offered decent automation. After using it and understanding better more nuances of using De Bruijn indices, I can appreciate the beauty of \textit{Locally Nameless} approach, but given its limited amount of automation, it is a library best used for more complex calculi.
+In this project, the choice of the library was quite highly influenced by my level of understanding. I started with \textit{autosubst} which was the simplest one and quite easy to learn, but than it seemed that it imposed some constraints that didn't allow to express important parts of the calculus (although it may have been possible to work around them with some clever and ugly tricks). Than I tried both \textit{Locally Nameless} and \textit{DbLib}, but at that point \textit{Locally Nameless} was still too hard to understand it to be able to use it. \textit{DbLib} was a nice middle-ground between flexibility and complexity and it still offered decent automation. After using it and understanding better more nuances of using De Bruijn indices, I can appreciate the beauty of \textit{Locally Nameless} approach, but given its limited amount of automation, it is a library best used for more complex calculi.
 
 \subsection{Testing before proving}
 Adding the pattern matching was a very delicate matter, especially as we had to diverge slightly from the original calculus. It was easy to make mistakes in the definitions of types and syntax (for example one of the bugs was having the two variables bound by app in different order in the typing judgement and in the semantics). Such mistakes lead to unprovable theorems, but they may not be easy to notice during proving. To avoid such issues, I decided to write some `unit tests' - I defined simple programs in the calculus that I know should work and tried proving that they do typecheck and evaluate correctly. These proofs were usually rather easy but they helped find lots of simple mistakes. Moreover, they can serve as examples of how to use the calculus in the formalized version which helps understanding.
@@ -399,6 +409,7 @@ which defines a tactic that finds a hypothesis containing a typing judgement for
 
 
 \section{Summary}
+\label{sec:summary}
 
 We have described the $\lambda^{\RIGHTcircle}$ calculus and various challenges concerning formalizing it in Coq and proving its soundness. We discuss some of the available libraries useful in formalizing calculi and some other good practices for proving in Coq. Our main contribution is the mechanized formalization of the calculus along with its soundess proofs that can be found at \href{https://github.com/radeusgd/QuotedPatternMatchingProof/}{https://github.com/radeusgd/QuotedPatternMatchingProof/}.
 
@@ -407,6 +418,10 @@ We have described the $\lambda^{\RIGHTcircle}$ calculus and various challenges c
 
 
 \section*{Appendix}
+\def\e{e}
+\def\t{t}
+\def\u{u}
+\def\p{p}
 
 \newcommand{\quoted}[1]{\Box\;#1}
 \newcommand{\lift}[1]{\texttt{lift}\;#1}
@@ -437,8 +452,106 @@ To simplify the proofs, we remove nested patterns leaving only simpler non-neste
 
 As we use De Bruijn indices, the rules in the formalization look slightly different. For readability we present them in similar style to the original, so we introduce names for bound variables and add them in the syntax of the pattern matches. $b_0$ stands for the introduced variable name that corresponds to the most closely bound De Bruijn index and $b_1$ stands for the next index.
 
-As we have separate syntactic forms for each pattern, we remove the general \textsc{T-Pat} rule and its helper pattern typing rules and replace them with the following rules:
+For clarity, we show how the syntax of our patterns corresponds to non-nested patterns in the original syntax in figure \ref{fig:pattern-syntax}.
+
+\newcommand{\syntaxeq}[2]{ #1 \quad &\equiv \quad #2 \\ }
+
 \begin{figure}[h]
+  \centering
+  \begin{framed}
+    \begin{align}
+     \syntaxeq
+     { \texttt{MatchNat} \; t_1 \; n \; t_2 \; t_3 }
+     { \patmat{t_1}{\patnat{n}}{t_2}{t_3} }     
+    \syntaxeq
+     { \texttt{MatchVar} \; t_1 \; x \; t_2 \; t_3 }
+     { \patmat{t_1}{\patref{x}}{t_2}{t_3} }
+         \syntaxeq
+     { \texttt{MatchApp} \; t_1 \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3 }
+     { \patmat{t_1}{\patapp{(\patbind{b_0}{T_1})}{(\patbind{b_1}{T_1 \to T_2})}}{t_2}{t_3} }     
+         \syntaxeq
+     { \texttt{MatchUnlift} \; t_1 \; b_0 \; t_2 \; t_3 }
+     { \patmat{t_1}{\patunlift{b_0}}{t_2}{t_3} }  
+         \syntaxeq
+     { \texttt{MatchLam} \; t_1 \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3 }
+     { \patmat{t_1}{\patlam{b_0}{T_1 \to T_2}}{t_2}{t_3} }
+     \syntaxeq
+     { \texttt{MatchFix} \; (\tpd{t_1}{T_1}) \; b_0 \; t_2 \; t_3 }
+     { \patmat{(\tpd{t_1}{T_1})}{\patfix{(\patbind{b_0}{T_1 \to T_1})}}{t_2}{t_3} }
+     \end{align}
+  \end{framed}
+  \caption{Pattern syntax clarification}
+  \label{fig:pattern-syntax}
+\end{figure}
+
+As we have separate syntactic forms for each pattern, we remove the general \textsc{T-Pat} rule and its helper pattern typing rules and we replace them with rules outlined in figure \ref{fig:pattern-type-system}. The rules that were kept are listed in \ref{fig:explicitly-typed-type-system}.
+
+\begin{figure}
+  \centering
+  \begin{framed}
+    
+    \textbf{Explicitly-typed Terms Typing} \hfill \framebox[1.2\width][r]{$\Gamma \vdash^i t \in T$}
+    
+    \begin{multicols}{2}
+      
+      % Coll 1
+      
+      \vbox{
+        \infax[T-Nat]
+        { \Gamma \vdash^i \tpd{n}{Nat} \in Nat  }
+        \vspace{2mm}
+      }
+      
+      \infrule[T-Var]
+      { \Gamma(x^i) = T }
+      { \Gamma \vdash^i \tpd{x}{T} \in T  }
+      
+      \vspace{1mm}
+      
+      \infrule[T-Abs]
+      { \Gamma,x^i{:}T_1 \vdash^i \t_2 \in T_2 }
+      { \Gamma \vdash^i \tpd{(\lam{x}{T_1}{\t_2})}{T_1{\to}T_2} \;\in\; T_1{\to}T_2  }
+      
+      \vspace{1mm}
+      
+      \infrule[T-App]
+      { \Gamma \vdash^i \t_1 \in T_1{\to}T_2 \andalso  \Gamma \vdash^i \t_2 \in T_1}
+      { \Gamma \vdash^i \tpd{(\app{\t_1}{\t_2})}{T_2} \;\in\; T_2  }
+      
+      
+      % Coll 2
+      
+      \infrule[T-Fix]
+      { \Gamma \vdash^i \t \in T{\to}T }
+      { \Gamma \vdash^i \tpd{(\fix{\t})}{T} \;\in\; T  }
+      
+      \vspace{1mm}
+      
+      \infrule[T-Lift]
+      { \Gamma \vdash^0 \t \in Nat }
+      { \Gamma \vdash^0 \tpd{(\lift{t})}{\qtype{Nat}} \;\in\; \qtype{Nat} }
+      
+      \vspace{1mm}
+      
+      \infrule[T-Box]
+      { \Gamma \vdash^1 \t \in T }
+      { \Gamma \vdash^0 \tpd{(\quoted{\t})}{\qtype{T}} \;\in\; \qtype{T} }
+      
+      \vspace{1mm}
+      
+      \infrule[T-Unbox]
+      { \Gamma \vdash^0 \t \in \qtype{T} }
+      { \Gamma \vdash^1 \tpd{(\splice{\t})}{T} \;\in\; T  }
+      
+      
+    \end{multicols}
+    
+  \end{framed}
+  \caption{Explicitly-typed Terms Typing (retained rules)}
+  \label{fig:explicitly-typed-type-system}
+\end{figure}
+
+\begin{figure}
 \centering
 \begin{framed}
     
@@ -450,7 +563,7 @@ As we have separate syntactic forms for each pattern, we remove the general \tex
   \Gamma \vdash^0 t_2 \in T \andalso
   \Gamma \vdash^0 t_3 \in T
 }
-{ \Gamma \vdash^0 \tpd{(\texttt{MatchNat} \; t_1 \; n \; t_2 \; t_3)}{T} \;\in\; T  }
+{ \Gamma \vdash^0 \tpd{(\patmat{t_1}{\patnat{n}}{t_2}{t_3})}{T} \;\in\; T  }
 
 \vspace{1mm}
 
@@ -461,7 +574,7 @@ As we have separate syntactic forms for each pattern, we remove the general \tex
   \Gamma \vdash^0 t_2 \in T \andalso
   \Gamma \vdash^0 t_3 \in T
 }
-{ \Gamma \vdash^0 \tpd{(\texttt{MatchVar} \; t_1 \; x \; t_2 \; t_3)}{T} \;\in\; T  }
+{ \Gamma \vdash^0 \tpd{(\patmat{t_1}{\patref{x}}{t_2}{t_3})}{T} \;\in\; T  }
 
 \vspace{1mm}
 
@@ -471,7 +584,7 @@ As we have separate syntactic forms for each pattern, we remove the general \tex
   \Gamma; \, b_1^0 : \qtype{(T_1 \to T_2)}; \, b_0^0 : \qtype{T_1} \vdash^0 t_2 \in T \andalso
   \Gamma \vdash^0 t_3 \in T
 }
-{ \Gamma \vdash^0 \tpd{(\texttt{MatchApp} \; t_1 \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} \;\in\; T  }
+{ \Gamma \vdash^0 \tpd{(\patmat{t_1}{\patapp{(\patbind{b_0}{T_1})}{(\patbind{b_1}{T_1 \to T_2})}}{t_2}{t_3})}{T} \;\in\; T  }
 
 \vspace{1mm}
 
@@ -481,7 +594,7 @@ As we have separate syntactic forms for each pattern, we remove the general \tex
   \Gamma; \, b_0^0 : Nat \vdash^0 t_2 \in T \andalso
   \Gamma \vdash^0 t_3 \in T
 }
-{ \Gamma \vdash^0 \tpd{(\texttt{MatchUnlift} \; t_1 \; b_0 \; t_2 \; t_3)}{T} \;\in\; T  }
+{ \Gamma \vdash^0 \tpd{(\patmat{t_1}{\patunlift{b_0}}{t_2}{t_3})}{T} \;\in\; T  }
 
 \vspace{1mm}
 
@@ -491,7 +604,7 @@ As we have separate syntactic forms for each pattern, we remove the general \tex
   \Gamma; \, b_0^0 : \qtype{T_1} \to \qtype{T_2} \vdash^0 t_2 \in T \andalso
   \Gamma \vdash^0 t_3 \in T
 }
-{ \Gamma \vdash^0 \tpd{(\texttt{MatchLam} \; t_1 \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3)}{T} \;\in\; T  }
+{ \Gamma \vdash^0 \tpd{(\patmat{t_1}{\patlam{b_0}{T_1 \to T_2}}{t_2}{t_3})}{T} \;\in\; T  }
 
 \vspace{1mm}
 
@@ -501,37 +614,109 @@ As we have separate syntactic forms for each pattern, we remove the general \tex
   \Gamma; \, b_0^0 : \qtype{(T_1 \to T_1)} \vdash^0 t_2 \in T \andalso
   \Gamma \vdash^0 t_3 \in T
 }
-{ \Gamma \vdash^0 \tpd{(\texttt{MatchFix} \; t_1 \; b_0 \; t_2 \; t_3)}{T} \;\in\; T  }
+{ \Gamma \vdash^0 \tpd{(\patmat{(\tpd{t_1}{T_1})}{\patfix{(\patbind{b_0}{T_1 \to T_1})}}{t_2}{t_3})}{T} \;\in\; T  }
 
 \end{framed}
 \caption{Explicitly-typed Terms Typing (added rules)}
 \label{fig:pattern-type-system}
 \end{figure}
 
+Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc{E-Pat} for each pattern as they are separate syntactic forms. This however makes the \textit{match} function obsolete, as all matching rules are directly expressed by these separate rules, as listed in figure \ref{fig:pattern-semantics}. The other semantic rules that were kept are listed in figure \ref{fig:operational-semantics}.
+
+\begin{figure}
+  \centering
+  \begin{framed}
+    
+    \begin{minipage}{0.45\linewidth}
+      \infrule[E-App-1]
+      { \t_1 \longrightarrow^i \t_1' }
+      { \tpd{(\app{\t_1}{\t_2})}{T} \longrightarrow^i \tpd{(\app{\t_1'}{\t_2})}{T} }
+      
+      \vspace{5mm}
+      
+      \infrule[E-App-2]
+      { \t_2 \longrightarrow^i \t_2' }
+      { \tpd{(\app{\t_1}{\t_2})}{T} \longrightarrow^i \tpd{(\app{\t_1}{\t_2'})}{T} }
+      
+      \vspace{5mm}
+      
+      \infrule[E-Abs]
+      { \t \longrightarrow^1 \t' }
+      { \tpd{(\lam{x}{T_1}{\t})}{T} \longrightarrow^1 \tpd{(\lam{x}{T_1}{\t'})}{T} }
+      
+      \vspace{5mm}
+      
+      \infax[E-Lift-Red]
+      { \tpd{(\lift{n})}{T} \longrightarrow^0 \tpd{(\quoted{n})}{T} }
+      
+    \end{minipage}
+    \begin{minipage}{0.50\linewidth}
+      
+      \infrule[E-Box]
+      { \t \longrightarrow^1 \t' }
+      { \tpd{(\quoted{\t})}{T} \longrightarrow^0 \tpd{(\quoted{\t'})}{T} }
+      
+      \vspace{5mm}
+      
+      \infrule[E-Unbox]
+      { \t \longrightarrow^0 \t' }
+      { \tpd{(\splice{\t})}{T} \longrightarrow^1 \tpd{(\splice{\t'})}{T} }
+      
+      \vspace{8mm}
+      
+      \infax[E-Splice]
+      { \tpd{(\splice{\quoted{\hat\t\,}})}{T} \longrightarrow^1 \tpd{\hat\t}{T} }
+      
+      \vspace{5mm}
+      
+      \infrule[E-Lift]
+      { \t \longrightarrow^0 \t' }
+      { \tpd{(\lift{\t})}{T} \longrightarrow^0 \tpd{(\lift{\t'})}{T} }
+      
+    \end{minipage}
+    
+    \vspace{4mm}
+    
+    \infax[E-Beta]
+    { \tpd{(\app{\tpd{(\lam{x}{T_1}{\t})}{(T_1{\to}T_2})}{v})}{T_2} \longrightarrow^0 \t[x \mapsto \strip{v}] }
+    
+    \vspace{1mm}
+    
+    \infrule[E-Fix]
+    { \t \longrightarrow^i \t' }
+    { \tpd{(\fix{\t})}{T} \longrightarrow^i \tpd{(\fix{\t'})}{T} }
+    
+    \vspace{1mm}
+    
+    \infax[E-Fix-Red]
+    { \tpd{(\fix{\lam{f}{T}{\t})}}{T} \longrightarrow^0 \t[f \mapsto \fix{\lam{f}{T}{\t}}] }
+    
+  \end{framed}
+  \caption{Small-step operational semantics (retained rules)}
+  \label{fig:operational-semantics}
+\end{figure}
 
 
-Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc{E-Pat} for each pattern as they are separate syntactic forms. This however makes the \textit{match} function obsolete, as all matching rules are directly expressed by these separate rules.
-
-\begin{figure}[h]
+\begin{figure}
   \centering
   \begin{framed}
   
 \infrule[E-PatNat-Red]
 { t \longrightarrow^0 t'}
-{ \tpd{(\texttt{MatchNat} \; t \; n \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchNat} \; t' \; n \; t_2 \; t_3)}{T} }
+{ \tpd{(\patmat{t}{\patnat{n}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patnat{n}}{t_2}{t_3})}{T} }
 
 \infax[E-PatNat-Succ]
-{ \tpd{(\texttt{MatchNat} \; \tpd{(\quoted{n})}{\qtype{Nat}} \; n \; t_2 \; t_3)}{T} \longrightarrow^0 t_2 }
+{ \tpd{(\patmat{\tpd{(\quoted{n})}{\qtype{Nat}}}{\patnat{n}}{t_2}{t_3})}{T} \longrightarrow^0 t_2 }
 
 \infrule[E-PatNat-Fail]
 { t \not= n \andalso t \text{ is plain} }
-{ \tpd{(\texttt{MatchNat} \; \tpd{(\quoted{t})}{\qtype{Nat}} \; n \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
+{ \tpd{(\patmat{\tpd{(\quoted{t})}{\qtype{Nat}}}{\patnat{n}}{t_2}{t_3})}{T} \longrightarrow^0 t_3 }
 
 \vspace{1mm}
 
 \infrule[E-PatVar-Red]
 { t \longrightarrow^0 t' }
-{ \tpd{(\texttt{MatchVar} \; t \; x \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchVar} \; t' \; x \; t_2 \; t_3)}{T} }
+{ \tpd{(\patmat{t}{\patref{x}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patref{x}}{t_2}{t_3})}{T} }
 
 \infax[E-PatVar-Succ]
 { \tpd{(\texttt{MatchVar} \; \tpd{(\quoted{x})}{\qtype{T_1}} \; x \; t_2 \; t_3)}{T} \longrightarrow^0 t_2 }
@@ -544,7 +729,7 @@ Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc
 
 \infrule[E-PatApp-Red]
 { t \longrightarrow^0 t'}
-{ \tpd{(\texttt{MatchApp} \; t \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchApp} \; t' \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} }
+{ \tpd{(\patmat{t}{\patapp{(\patbind{b_0}{t})}{(\patbind{b_1}{t \to T_2})}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patapp{(\patbind{b_0}{t})}{(\patbind{b_1}{t \to T_2})}}{t_2}{t_3})}{T} }
 
 \infrule[E-PatApp-Succ]
 { t = (e_1 \; e_2) \andalso t \text{ is plain} }
@@ -559,7 +744,7 @@ Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc
 
 \infrule[E-PatUnlift-Red]
 { t \longrightarrow^0 t'}
-{ \tpd{(\texttt{MatchUnlift} \; t \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchUnlift} \; t' \; b_0 \; t_2 \; t_3)}{T} }
+{ \tpd{(\patmat{t}{\patunlift{b_0}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patunlift{b_0}}{t_2}{t_3})}{T} }
 
 \infax[E-PatUnlift-Succ]
 { \tpd{(\texttt{MatchUnlift} \; \tpd{(\quoted{n})}{\qtype{Nat}} \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto n] }
@@ -572,10 +757,10 @@ Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc
 
 \infrule[E-PatLam-Red]
 { t \longrightarrow^0 t'}
-{ \tpd{(\texttt{MatchLam} \; t \; T_1 \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchLam} \; t' \; T_1 \; b_0 \; t_2 \; t_3)}{T} }
+{ \tpd{(\patmat{t}{\patlam{b_0}{t \to T_2}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patlam{b_0}{t \to T_2}}{t_2}{t_3})}{T} }
 
 \infrule[E-PatLam-Succ]
-{ t = \lam{x}{T_1}{e} \andalso t \text{ is plain} \andalso x' \text{ is not bound anywhere in } t }
+{ t = \lam{x}{T_1}{e} \andalso t \text{ is plain} \andalso x' \text{ is fresh} }
 { \tpd{(\texttt{MatchLam} \; \tpd{(\quoted{t})}{\qtype{(T_1 \to T_2)}} \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto \lam{x'}{\qtype{T_1}}{\quoted{e[x \mapsto \splice{x'}]}}] }
 
 \infrule[E-PatLam-Fail]
@@ -594,7 +779,7 @@ Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc
 
 \infrule[E-PatFix-Fail]
 { t \text{ is not a fix expression} \andalso t \text{ is plain} }
-{ \tpd{(\texttt{MatchFix} \; \tpd{(\quoted{t})}{\qtype{T_1}} \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
+{ \tpd{(\patmat{(\tpd{t}{t})}{\patfix{(\patbind{b_0}{t \to t})}}{t_2}{t_3})}{T} \longrightarrow^0 t_3 }
 
   
   \end{framed}
@@ -602,5 +787,7 @@ Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc
   \label{fig:pattern-semantics}
 \end{figure}
 
+
+$\forall_e. t \not= \fix{e}$
 
 \end{document}
