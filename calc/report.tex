@@ -11,7 +11,7 @@
 \usepackage{stmaryrd}
 \usepackage{listings}
 %\usepackage{minted}
-\usepackage{xcolor}
+\usepackage[dvipsnames]{xcolor}
 \usepackage{hyperref}
 \usepackage[margin=1in]{geometry}
 \usepackage{pxfonts}
@@ -43,6 +43,36 @@
 %\lstset{basicstyle=\small\ttfamily}
 
 % \newcommand{\fresh}[1]{\boxed{#1}}
+
+\def\e{e}
+\def\t{t}
+\def\u{u}
+\def\p{p}
+
+\newcommand{\quoted}[1]{\Box\;#1}
+\newcommand{\lift}[1]{\texttt{lift}\;#1}
+\newcommand{\qtype}[1]{\Box#1}
+\newcommand{\splice}[1]{\$\;#1}
+\newcommand{\fix}[1]{\texttt{fix}\;#1}
+\newcommand{\app}[2]{#1\;#2}
+\newcommand{\tpd}[2]{{#1}{:}{#2}}
+
+\newcommand{\patnat}[1]{#1}
+\newcommand{\patapp}[2]{#1\;#2}
+\newcommand{\patref}[1]{#1}
+\newcommand{\patunlift}[1]{\texttt{unlift}\;#1}
+\newcommand{\patbind}[2]{\texttt{bind}[#2]\;#1}
+\newcommand{\patlam}[2]{\texttt{lam}[#2]\;#1}
+\newcommand{\patfix}[1]{\texttt{fix}\;#1}
+
+\newcommand{\patmat}[4]{\patmatSP{#1}{#2}\patmatThen{#3}#4}
+\newcommand{\patmatSP}[2]{#1 \sim #2\;?}
+\newcommand{\patmatThen}[1]{\;#1\; \| \;}
+
+\newcommand{\lam}[3]{\lambda#1{:}#2.#3}
+
+\newcommand{\strip}[1]{|#1|}
+
 
 \begin{document}
 % title
@@ -110,10 +140,10 @@ Nesting of quotes is spliced is expressed by term's level - level 0 terms are th
 Below is an example of a term in the calculus, implementing a function that matches application of a function taking a number and replaces its argument with $42$, if the match fails the original code is returned. (We skip the explicit types for clarity):
 
 \begin{equation*}
-  \Big(\lambda e: \square Nat. \; e \sim \big((\texttt{bind} [Nat \to Nat] \; f) \; (\texttt{bind} [Nat] \; x)\big) \; ? \; \square(\$f \; 42) \; || \; e \Big) \;\; \square((\lambda x: Nat. \; x) \; 10)
+  \Big(\lam{e}{\qtype{Nat}}{e \sim \big((\texttt{bind} [Nat \to Nat] \; f) \; (\texttt{bind} [Nat] \; x)\big) \; ? \; \square(\$f \; 42) \; || \; e} \Big) \;\; \square((\lam{x}{Nat}{x}) \; 10)
 \end{equation*}
 
-This term will reduce to a code value with the same function but applied to the different argument: $\square((\lambda x: Nat. \; x) \; 42)$.
+This term will reduce to a code value with the same function but applied to the different argument: $\square((\lam{x}{Nat}{x}) \; 42)$.
 
 \section{Definitions in Coq}
 \label{sec:definitions}
@@ -125,29 +155,44 @@ Defining the calculus in Coq required some simplifications to be able to express
 
 Variable binding is a common issue that is encountered in all projects that try mechanizing proofs about calculi. 
 
-On paper we just use textual names and define a capture-avoiding substitution operation. This is possible in Coq, but this kind of function is not so easy to define - we need to apply recursively on terms that are not structurally sub-terms of the main terms (because sometimes they may be renamed etc.). As Coq only accepts total functions, we need to show that the invocations are indeed on tems smaller in some way. This however highly complicates the definitions and also makes it harder to reason about theorems using such a complex function.
+On paper we just use textual names and define a capture-avoiding substitution operation. This is possible in Coq, but this kind of function is not so easy to define - we need to apply recursively on terms that are not structurally sub-terms of the main terms (because sometimes they may be renamed etc.). As Coq only accepts total functions, we need to show that the invocations are indeed on tems smaller in some way. Moreover the concept of $\alpha-\text{equivalence}$ becomes much more complicated because one has to define terms as their equivalence classes). This highly complicates the definitions and also makes it harder to reason about theorems.
 
 \subsubsection{De Bruijn indices}
 
-The usual solution to this problem is using De Bruijn indices \cite{Bruijn1972LambdaCN}. In a term encoded using De Bruijn indices, variable names are replaced by indices - numbers that indicate how many binders are in scope (in the expression tree) between the variable and the binder that this variable is referring to. For example the variable referring to the closest lambda gets index 0 (or depending on convention, it can start with 1, but we will start with 0), one referring to the closest lambda after that one gets 1 etc. In such notation, $\alpha$-equivalence is reduced to syntactic equality and defining capture avoiding substitution is much simpler.
+The usual solution to this problem is using De Bruijn indices \cite{Bruijn1972LambdaCN}. In a term encoded using De Bruijn indices, variable names are replaced by indices - numbers that indicate how many binders are in scope (in the expression tree) between the variable and the binder that this variable is referring to. For example the variable referring to the closest lambda gets index 0 (or depending on convention, it can start with 1, but we will start with 0), one referring to the closest lambda after that one gets 1 etc. In such notation, $\alpha-\text{equivalence}$ is reduced to syntactic equality and defining capture avoiding substitution is much simpler.
 
-For example, the identity function $\lambda x. \, x$ is encoded as $\lambda. \, \#0$ and the K combinator $\lambda x. \, \lambda y. \, x$ becomes $\lambda. \, \lambda. \, \#1$.
+For example, the identity function $\lambda x. \, x$ is encoded as $\lambda. \, \#0$ and the K combinator ${\color{blue}\lambda x}. \, {\color{OliveGreen}\lambda y}. \, {\color{blue}x}$ becomes ${\color{blue}\lambda}. \, {\color{OliveGreen}\lambda}. \, {\color{blue}\#1}$.
 
 All the free variables also have to be remapped to natural numbers. An index greater than the number of binders that it is surrounded by refers to free variables. For example the terms $\#0$ and $\lambda. \#1$ refer to the first free variable, $\#1$ to the second one etc.
 
+We can list the free variables in form of an environment next to the term, so that it is clearer what the free variables refer to. To clarify, we can compare a term using names and De Bruijn indices in which variables are colored accordingly to which binder (or free variable) they refer to:
+
+\begin{align*}
+ {\color{OliveGreen}\tpd{f}{T_1}}; \; {\color{brown}\tpd{g}{T_2}} \vdash & {\color{blue} \lambda x}. \; {\color{Plum}\lambda y}. \; {\color{OliveGreen}f} \; {\color{blue}x} \; {\color{Plum}y} \\
+  {\color{OliveGreen} T_1}; \; {\color{brown}T_2} \vdash & {\color{blue} \lambda}. \;\; {\color{Plum}\lambda}. \;\; {\color{OliveGreen} \#3} \; {\color{blue}\#1} \; {\color{Plum} \#0}
+\end{align*}
+
+It is important to note, that the same index can point to different variables and the same variable can be pointed to by different indices - the index depends heavily on the context (as the binder distance is different in different contexts), as shown in the example below:
+
+\begin{align*}
+{\color{OliveGreen}\tpd{f}{T_1}} \vdash & {\color{blue} \lambda x}. \; ({\color{Plum}\lambda y}. \; {\color{OliveGreen}f} \; {\color{blue}x} \; {\color{Plum}y}) \; {\color{blue}x} \\
+{\color{OliveGreen}T_1} \vdash & {\color{blue} \lambda}. \;\; ({\color{Plum}\lambda}. \; {\color{OliveGreen}\#2} \; {\color{blue}\#1} \; {\color{Plum}\#0}) \; {\color{blue}\#0}
+\end{align*}
+
 When substituting, it is important to keep track of the index - when traversing inside of a binder it has to be updated to still refer to the same variable.
-For example, when reducing $(\lambda. \, \lambda. \, \#1) \; (\lambda. \, \#2)$, $\#2$ refers to the second free variable (we have to skip one binder, so we refer to the free variable number $1$, but as we are $0$-indexing, that is the second free variable), after $\beta$-reduction, we get $\lambda. \lambda. \, \#3$ - the substituted term had to be shifted to still refer to the second free variable (as it is now behind not one but two binders).
+For example, when reducing ${\color{blue}T_1}; T_2 \vdash (\lambda. \, \lambda. \, \#1) \; (\lambda. \, {\color{blue}\#2})$, $\#2$ refers to the second free variable, after $\beta$-reduction, we get ${\color{blue}T_1}; T_2 \vdash \lambda. \lambda. \, {\color{blue}\#3}$ - the substituted term had to be shifted to still refer to the second free variable (as it is now behind not one but two binders).
+
 
 \subsubsection{DbLib}
 
-As handling variable binding is common to nearly all calculi formalizations, there are some Coq libraries that help automating parts of reasoning about them. In this project we are using the DbLib library \cite{dblib}, the reasons for choosing it are discussed in section \ref{binderlibs}.
+As handling variable binding is common to nearly all calculi formalizations, there are some Coq libraries that help automating parts of reasoning about them. In this project we are using the DbLib library \cite{dblib}, some other existing solutions are discussed in section \ref{binderlibs}.
 \label{traverse}
 When using DbLib we freely define our syntactic forms as some inductive type. We have two types - typed terms (\texttt{typedterm}) and untyped terms (\texttt{term}), and we can substitute an untyped term into both of these types. To use the automation facilities provided by the library, we need to define:
 \begin{itemize}
   \item an instance of \texttt{Var} typeclass which is used for constructing variables - it requires a function \texttt{var} that takes a De Bruijn index (which is simply a natural number) and returns an instance of the type that we will be substituting (in our case \texttt{term}); for us the instance is just calling the constructor \texttt{var x = Var x}
   \item instances of \texttt{Traverse} typeclass which requires a function \texttt{traverse} taking 3 parameters: a function \texttt{f} representing the operation that is applied to the term-tree, a natural number \texttt{l} representing the current level and a term \texttt{t} that is traversed. It has to recursively traverse all subterms in \texttt{t}, increasing \texttt{l} when entering a binder, and each encountered instance of a variable \texttt{Var x} has to be replaced with \texttt{f l x}.
 \end{itemize}
-Afterwards some lemmas have to be proven to show that the \texttt{traverse} function satisfied the required constraints - for example it has to be injective. If the function is defined reasonably, these properties are derived automatically by tactics provided by the library.
+Afterwards some lemmas have to be proven to show that the \texttt{traverse} function satisfies the required constraints - for example it has to be injective. If the function is defined reasonably, these properties are derived automatically by tactics provided by the library.
 
 Once this is defined, substitution, shift etc. are automatically derived by using the \texttt{traverse} function.
 
@@ -163,7 +208,7 @@ e \sim (\texttt{MatchApp} \, [Nat \to Nat] \, a_1 \, [Nat] \, a_2) \; ? \; \Bigg
 \]
 (where \texttt{MatchApp} pattern is a special pattern which matches an application and binds the first and second term to $a_1$ and $a_2$ respectively).
 
-After simplifying to non-nested patterns, the \texttt{bind} pattern is not useful anymore, so we remove it (in non-nested approach it would be equivalent to a let statement). However all of the other patterns that can bind something are changed in a way that they emulate containing the BIND, as shown in the example above. Ultimately, we have the following patterns: Nat, Var, Fix, App, Unlift, Abs, Lam.
+After simplifying to non-nested patterns, the \texttt{bind} pattern is not useful anymore, so we remove it (in non-nested approach it would be equivalent to a let statement). However all of the other patterns that can bind something are changed in a way that they emulate containing the \texttt{bind}, as shown in the example above. Ultimately, we have the following patterns: Nat, Var, Fix, App, Unlift, Abs, Lam.
 
 Even after the simplification, the App pattern still introduces two variable bindings, so we need to be able to support it. This is still much simpler than the arbitrary amount of bindigs that we started with.
 
@@ -354,7 +399,48 @@ We extensively use the tactics provided by DbLib for dealing with substitutions 
 \subsection{Multiple binders at once}
 \label{multibind}
 
-\todo[inline]{TODO: describe 2 binders in App issue}
+Patterns that represent multiple binders and are substituted at once have to be considered very carefully as it is not that trivial to judge which indices to shift and how.
+
+First, let's see how reducing a normal lambda abstraction works. For clarity, to show the intermediate step, we define the substitution operation $(e_1)[e_2/]$ that substitutes all De Bruijn indices equal to 0 in $e_1$ with $e_2$ and decreases other indices (to indicate that after substitution we have got rid of one binder). As the substitution operation is an intermediate step, the enclosing lambda is removed already, but the indices are not yet shifted, so to keep the De Bruijn indices consistent, we treat the parentheses as a binder, so that the expression inside is most closely bound to what will be substituted. With these definitions, reducing a lambda application will proceed as follows:
+
+\begin{align*}
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash ({\color{Fuchsia}\lambda}. \; {\color{Fuchsia}\#0} \; {\color{OliveGreen}\#1}) \; {\color{blue}\#1} \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}({\color{Fuchsia}\#0} \; {\color{OliveGreen}\#1})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{blue}\#1} \; {\color{OliveGreen}\#0}
+\end{align*}
+
+Now, let's analyse how we can define matching a 2-element tuple (in our case we were matching an application, but we choose this example as it is more familiar). Let's define $\texttt{unpack} (e_1, e_2) \texttt{ as } (x_1, x_2) \texttt{ in } t$ as the operation that deconstructs a tuple $(e_1, e_2)$ and binds in $e_1$ to $p_1$ and $e_2$ to $p_2$ in $t$.
+
+As we are in the realm of De Bruijn indices, we modify that syntax to just $\texttt{unpack} (e_1, e_2) \texttt{ as } (\bullet, \bullet) \texttt{ in } t$ where the two bullets count as two binders. Inside of $t$, the closest De Bruijn index (0) is bound to $e_2$ and the next one (1) to $e_1$ (we use the order that may seem reversed but that is to express that $e_2$ corresponds to the second bullet which is closer to $t$ than the one that $e_1$ corresponds to). To illustrate, $\texttt{unpack} (e_1, e_2) \texttt{ as } ({\color{blue}\bullet}, {\color{OliveGreen}\bullet}) \texttt{ in } ({\color{blue}\#1} \; {\color{OliveGreen}\#0}) \longrightarrow (e_1 \; e_2)$.
+
+It is tempting to define the reduction rule as $\texttt{unpack} (e_1, e_2) \texttt{ as } (\bullet, \bullet) \texttt{ in } t \longrightarrow ((t)[e_2/])[e_1/]$. But let's analyse how that would work on an example with free variables:
+
+\begin{align*}
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash \texttt{unpack} ({\color{blue}\#1}, {\color{OliveGreen}\#0}) \texttt{ as } ({\color{Fuchsia}\bullet}, {\color{BurntOrange}\bullet}) \texttt{ in } ({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0}) \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}(}{\color{BurntOrange}({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0})}[{\color{red}\#0}/]{\color{Fuchsia})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}(}{\color{Fuchsia}\#0} \; {\color{red}\#0}{\color{Fuchsia})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash ({\color{blue}\#1} \; {\color{blue}\#1})
+\end{align*}
+
+We would expect to get $({\color{blue}\#1} \; {\color{OliveGreen}\#0})$ as the result, but instead we get $({\color{blue}\#1} \; {\color{blue}\#1})$. We can see that something is wrong in the second line already. The ${\color{OliveGreen}\#0}$ that will be substituted, is an index 0, but it actually went inside the scope of the ${\color{Fuchsia}\bullet}$ binder (represented in the substitution operation as the parentheses ${\color{Fuchsia}( \; )}$). So in that context, the index $\#0$ actually points to the ${\color{Fuchsia}( \; )}$ binder and not ${\color{OliveGreen}T_1}$ as it should be (that's why we marked it {\color{red}red}, because it actually refers to something else than what we wanted). The issue becomes completely clear after performing the first substitution - both variables inside are now $\#0$ so they necessarily refer to the same thing, even though initially they were not meant to.
+
+The issue is that, when performing substitutions one-by-one (and many libraries allow to only do it this way), the substituted expression $e_2$ goes inside the scope of the other binder corresponding to $e_1$, so references in $e_2$ can be mistakenly captured to refer to $e_1$.
+
+To deal with this, we need to make sure that the indices inside of $e_2$ are updated correctly, so that the binder corresponding to $e_1$ is out of its scope. That is exactly what the \texttt{shift} function is for. \texttt{shift} simply increases all indices in a term by one, allowing us to go inside a scope of a binder, but without binding to it (so that all variables still reference the same things).
+
+The updated reduction rule will be $\texttt{unpack} (e_1, e_2) \texttt{ as } (\bullet, \bullet) \texttt{ in } t \longrightarrow ((t)[\texttt{shift }e_2/])[e_1/]$ where $\texttt{shift }e_2$ ensures that all variables in $e_2$ still point to the same things, even though we moved $e_2$ into another binder.
+
+We can revisit our example:
+
+\begin{align*}
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash \texttt{unpack} ({\color{blue}\#1}, {\color{OliveGreen}\#0}) \texttt{ as } ({\color{Fuchsia}\bullet}, {\color{BurntOrange}\bullet}) \texttt{ in } ({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0}) \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}(}{\color{BurntOrange}({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0})}[{\color{red}\texttt{shift }\#0}/]{\color{Fuchsia})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}(}{\color{BurntOrange}({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0})}[{\color{OliveGreen}\#1}/]{\color{Fuchsia})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}(}{\color{Fuchsia}\#0} \; {\color{OliveGreen}\#1}{\color{Fuchsia})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash ({\color{blue}\#1} \; {\color{OliveGreen}\#0})
+\end{align*}
+
+To sum up, when doing multiple substitutions one-by-one, we need to keep in mind that terms that have been substituted first are inside the scope of all further substitutions and can capture variables for them (and get their indices mixed-up completely!). To avoid this we need to make sure to \texttt{shift} the terms as necessarily to preserve consistency of the references. When substituting more than 2 binders at once, we may even need to \texttt{shift} some terms multiple times.
 
 \subsection{Variable binding libraries}
 \label{binderlibs}
@@ -418,39 +504,12 @@ We have described the $\lambda^{\RIGHTcircle}$ calculus and various challenges c
 
 
 \section*{Appendix}
-\def\e{e}
-\def\t{t}
-\def\u{u}
-\def\p{p}
 
-\newcommand{\quoted}[1]{\Box\;#1}
-\newcommand{\lift}[1]{\texttt{lift}\;#1}
-\newcommand{\qtype}[1]{\Box#1}
-\newcommand{\splice}[1]{\$\;#1}
-\newcommand{\fix}[1]{\texttt{fix}\;#1}
-\newcommand{\app}[2]{#1\;#2}
-\newcommand{\tpd}[2]{{#1}{:}{#2}}
-
-\newcommand{\patnat}[1]{#1}
-\newcommand{\patapp}[2]{#1\;#2}
-\newcommand{\patref}[1]{#1}
-\newcommand{\patunlift}[1]{\texttt{unlift}\;#1}
-\newcommand{\patbind}[2]{\texttt{bind}[#2]\;#1}
-\newcommand{\patlam}[2]{\texttt{lam}[#2]\;#1}
-\newcommand{\patfix}[1]{\texttt{fix}\;#1}
-
-\newcommand{\patmat}[4]{\patmatSP{#1}{#2}\patmatThen{#3}#4}
-\newcommand{\patmatSP}[2]{#1 \sim #2\;?}
-\newcommand{\patmatThen}[1]{\;#1\; \| \;}
-
-\newcommand{\lam}[3]{\lambda#1{:}#2.#3}
-
-\newcommand{\strip}[1]{|#1|}
 
 
 To simplify the proofs, we remove nested patterns leaving only simpler non-nested pattern matching. This requires changing some typing and semantic rules.
 
-As we use De Bruijn indices, the rules in the formalization look slightly different. For readability we present them in similar style to the original, so we introduce names for bound variables and add them in the syntax of the pattern matches. $b_0$ stands for the introduced variable name that corresponds to the most closely bound De Bruijn index and $b_1$ stands for the next index.
+As we use De Bruijn indices, the definitions in the mechanization look slightly different. For readability we present them in similar style to the original, so we introduce fake names for variables bound in the pattern matches that correspond to the De Bruijn indices. $b_0$ stands for the introduced variable name that corresponds to the most closely bound De Bruijn index and $b_1$ stands for the next index.
 
 For clarity, we show how the syntax of our patterns corresponds to non-nested patterns in the original syntax in figure \ref{fig:pattern-syntax}.
 
@@ -467,16 +526,16 @@ For clarity, we show how the syntax of our patterns corresponds to non-nested pa
      { \texttt{MatchVar} \; t_1 \; x \; t_2 \; t_3 }
      { \patmat{t_1}{\patref{x}}{t_2}{t_3} }
          \syntaxeq
-     { \texttt{MatchApp} \; t_1 \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3 }
+     { \texttt{MatchApp} \; t_1 \; T_1 \; T_2 \; {\color{gray}b_0} \; {\color{gray}b_1} \; t_2 \; t_3 }
      { \patmat{t_1}{\patapp{(\patbind{b_0}{T_1})}{(\patbind{b_1}{T_1 \to T_2})}}{t_2}{t_3} }     
          \syntaxeq
-     { \texttt{MatchUnlift} \; t_1 \; b_0 \; t_2 \; t_3 }
+     { \texttt{MatchUnlift} \; t_1 \; {\color{gray}b_0} \; t_2 \; t_3 }
      { \patmat{t_1}{\patunlift{b_0}}{t_2}{t_3} }  
          \syntaxeq
-     { \texttt{MatchLam} \; t_1 \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3 }
+     { \texttt{MatchLam} \; t_1 \; (T_1 \to T_2) \; {\color{gray}b_0} \; t_2 \; t_3 }
      { \patmat{t_1}{\patlam{b_0}{T_1 \to T_2}}{t_2}{t_3} }
      \syntaxeq
-     { \texttt{MatchFix} \; (\tpd{t_1}{T_1}) \; b_0 \; t_2 \; t_3 }
+     { \texttt{MatchFix} \; (\tpd{t_1}{T_1}) \; {\color{gray}b_0} \; t_2 \; t_3 }
      { \patmat{(\tpd{t_1}{T_1})}{\patfix{(\patbind{b_0}{T_1 \to T_1})}}{t_2}{t_3} }
      \end{align}
   \end{framed}
@@ -621,7 +680,7 @@ As we have separate syntactic forms for each pattern, we remove the general \tex
 \label{fig:pattern-type-system}
 \end{figure}
 
-Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc{E-Pat} for each pattern as they are separate syntactic forms. This however makes the \textit{match} function obsolete, as all matching rules are directly expressed by these separate rules, as listed in figure \ref{fig:pattern-semantics}. The other semantic rules that were kept are listed in figure \ref{fig:operational-semantics}.
+Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc{E-Pat} for each pattern as they are separate syntactic forms. This however makes the \textit{match} function obsolete, as all matching rules are directly expressed by these separate rules, as listed in figure \ref{fig:pattern-semantics}. The other semantic rules that were kept are listed in figure \ref{fig:operational-semantics}. The notation $\hat\t$ is a shorthand for saying $t \text{ is plain}$.
 
 \begin{figure}
   \centering
@@ -774,12 +833,12 @@ Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc
 { \tpd{(\texttt{MatchFix} \; t \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchFix} \; t' \; b_0 \; t_2 \; t_3)}{T} }
 
 \infrule[E-PatFix-Succ]
-{ t = \fix{e} \andalso t \text{ is plain} }
-{ \tpd{(\texttt{MatchFix} \; \tpd{(\quoted{t})}{\qtype{T_1}} \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto \quoted{e}] }
+{ \hat\t = \fix{e} \andalso t \text{ is plain} }
+{ \tpd{(\texttt{MatchFix} \; \tpd{(\quoted{\hat\t})}{\qtype{T_1}} \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto \quoted{e}] }
 
 \infrule[E-PatFix-Fail]
-{ t \text{ is not a fix expression} \andalso t \text{ is plain} }
-{ \tpd{(\patmat{(\tpd{t}{t})}{\patfix{(\patbind{b_0}{t \to t})}}{t_2}{t_3})}{T} \longrightarrow^0 t_3 }
+{ \hat\t \not= \fix{t'} }
+{ \tpd{(\patmat{(\tpd{\quoted{\hat\t}}{\qtype{T_1}})}{\patfix{(\patbind{b_0}{T_1 \to T_1})}}{t_2}{t_3})}{T} \longrightarrow^0 t_3 }
 
   
   \end{framed}
@@ -787,7 +846,5 @@ Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc
   \label{fig:pattern-semantics}
 \end{figure}
 
-
-$\forall_e. t \not= \fix{e}$
 
 \end{document}
