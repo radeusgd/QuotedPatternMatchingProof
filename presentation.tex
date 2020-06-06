@@ -1,0 +1,223 @@
+\documentclass{beamer}
+\usetheme{Warsaw}
+\usepackage{graphicx}
+\usepackage[utf8]{inputenc}
+\usepackage{amsfonts}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{pxfonts}
+\usepackage{todonotes}
+\usepackage{wasysym} % lambda circle symbol
+\usepackage{framed}       % frames
+\usepackage{amssymb}      % empty set
+\usepackage{multicol}     % multi-column
+\usepackage{bcprules}     % typeset inference rule
+
+
+\def\e{e}
+\def\t{t}
+\def\u{u}
+\def\p{p}
+\newcommand{\calculus}{$\lambda^{\RIGHTcircle}$} 
+\newcommand{\quoted}[1]{\Box\;#1}
+\newcommand{\lift}[1]{\texttt{lift}\;#1}
+\newcommand{\qtype}[1]{\Box#1}
+\newcommand{\splice}[1]{\$\;#1}
+\newcommand{\fix}[1]{\texttt{fix}\;#1}
+\newcommand{\app}[2]{#1\;#2}
+\newcommand{\tpd}[2]{{#1}{:}{#2}}
+
+\newcommand{\patnat}[1]{#1}
+\newcommand{\patapp}[2]{#1\;#2}
+\newcommand{\patref}[1]{#1}
+\newcommand{\patunlift}[1]{\texttt{unlift}\;#1}
+\newcommand{\patbind}[2]{\texttt{bind}[#2]\;#1}
+\newcommand{\patlam}[2]{\texttt{lam}[#2]\;#1}
+\newcommand{\patfix}[1]{\texttt{fix}\;#1}
+
+\newcommand{\patmat}[4]{\patmatSP{#1}{#2}\patmatThen{#3}#4}
+\newcommand{\patmatSP}[2]{#1 \sim #2\;?}
+\newcommand{\patmatThen}[1]{\;#1\; \| \;}
+
+\newcommand{\lam}[3]{\lambda#1{:}#2.#3}
+
+\newcommand{\strip}[1]{|#1|}
+
+\lstset{basicstyle=\ttfamily}
+
+\title{Mechanized proof for Quoted Pattern Matching in Scala 3}
+\author{Radosław Waśko}
+\date{June 18, 2020}
+
+\setbeamertemplate{headline}
+{%
+  \leavevmode%
+  \begin{beamercolorbox}[wd=.5\paperwidth,ht=2.5ex,dp=1.125ex]{section in head/foot}%
+    \hbox to .5\paperwidth{\hfil\insertsectionhead\hfil}
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[wd=.5\paperwidth,ht=2.5ex,dp=1.125ex]{subsection in head/foot}%
+    \hbox to .5\paperwidth{\hfil\insertsubsectionhead\hfil}
+  \end{beamercolorbox}%
+}
+
+\setbeamertemplate{navigation symbols}{} 
+
+
+\begin{document}
+  \begin{frame}
+  \titlepage
+\end{frame}
+\begin{frame}
+  \calculus \, is an extension of \textit{simply typed lambda calculus} that adds splices, quotes and quoted pattern matching. It formalizes quoted pattern matching which is being added in Scala 3. \\~\
+  
+  The goal of this semester project was to create mechanized proofs of soundness of that calculus, based on the paper proofs in the original paper. The project consists of 1366 lines of Coq code, of which 585 are the proofs and 455 are definitions.
+\end{frame}
+\begin{frame}{Overview}
+  \tableofcontents
+\end{frame}
+
+\section{\calculus calculus}
+\begin{frame}[fragile]{\calculus example - compared with Scala}
+
+\begin{lstlisting}{scala}
+def f(e: Expr[Int]): Expr[Int] =
+  e match {
+    case '{ add(0, $y) } => y
+    case _ => e
+  }
+
+f(${add(0, 2)}) // evaluates to ${2}
+\end{lstlisting}
+
+corresponds to
+
+\begin{equation*}
+f = \lam{e}{\qtype{Nat}}{\patmat{e}{\big( \patapp{\patapp{add}{\patnat{0}}}{(\patbind{y}{Nat})} \big)}{y}{e}}
+\end{equation*}
+\begin{equation*}
+\big(\app{f \;}{\square(\app{\app{add}{0}}{2})} \big) \;\; \longrightarrow \square(2)
+\end{equation*}
+\end{frame}
+
+\newcommand{\sep}{\,|\,}
+\begin{frame}{\calculus syntax}
+
+\[
+\def\arraystretch{1.5}
+\begin{array}{lllr}
+
+\t & ::= & \tpd{\u}{T} \\
+\u & ::= & n \sep x \sep \lam{x}{T}{\t} \sep \app{\t}{\t} \sep \fix{\t} \sep \quoted{\t} \sep \splice{\t} \sep \lift{\t} \sep \patmat{\t}{\p}{\t}{\t} \\
+
+
+\p & ::= & \patnat{n} \sep \patref{x} \sep \patapp{\p}{\p} \sep \patfix{\p} \sep \patunlift{x} \sep \patbind{x}{T} \sep \patlam{x}{T} \\
+
+T & ::= & Nat \sep T{\to}T \sep \qtype{T} \\
+
+%\Gamma & ::= & \emptyset \sep \Gamma,x^i{:}T & typing \; environment \\
+%
+%i & \in & \{0, 1\} & levels
+\end{array}
+\]
+
+\let\thefootnote\relax\footnotetext{Definitions from the QPM paper}
+
+\end{frame}
+
+\begin{frame}{\calculus - selected typing rules}
+
+  \begin{framed}
+    
+    \begin{multicols}{2}
+      \infrule[T-Box]
+      { \Gamma \vdash^1 \t \in T }
+      { \Gamma \vdash^0 \tpd{(\quoted{\t})}{\qtype{T}} \;\in\; \qtype{T} }
+      
+    \vspace{1mm}
+    
+    \infrule[T-Unbox]
+    { \Gamma \vdash^0 \t \in \qtype{T} }
+    { \Gamma \vdash^1 \tpd{(\splice{\t})}{T} \;\in\; T  }
+    
+    \end{multicols}
+  
+%  \infrule[T-Pat]
+%  {
+%    \Gamma \vdash^0 \t_1 \in \qtype{T_1} \andalso
+%    \Gamma \vdash_p \p \in T_1 \leadsto \Gamma_p \andalso
+%    \Gamma;\Gamma_p \vdash^0 \t_2 \in T \andalso
+%    \Gamma \vdash^0 \t_3 \in T
+%  }
+%  { \Gamma \vdash^0 \tpd{(\patmat{\t_1}{\p}{\t_2}{\t_3})}{T} \;\in\; T  }
+
+  \end{framed}
+\end{frame}
+
+\begin{frame}
+TODO
+\end{frame}
+
+
+\section{De Bruijn indices}
+\begin{frame}{De Bruijn indices}
+To simplify the $\alpha$-equivalence relation and definition of substitution, instead of using normal names, we represent variables using De Bruijn indices
+
+The index specifies how many binders we have to skip (in the syntax tree) to reach the one we are bound to.
+
+\begin{equation*}
+  \lambda x. \, x \; \Longrightarrow \; \lambda. \, \#0
+\end{equation*}
+
+\begin{equation*}
+{\color{blue}\lambda x}. \, {\color{olive}\lambda y}. \, {\color{blue}x} \; \Longrightarrow \; {\color{blue}\lambda}. \, {\color{olive}\lambda}. \, {\color{blue}\#1}
+\end{equation*}
+
+\end{frame}
+
+\begin{frame}{De Bruijn indices - free variables}
+Indices greater than the number of binders surrounding it refer to free variables which are ordered.
+
+\begin{align*}
+{\color{olive}\tpd{f}{T_1}}; \; {\color{brown}\tpd{g}{T_2}} \vdash & {\color{blue} \lambda x}. \; {\color{purple}\lambda y}. \; {\color{olive}f} \; {\color{blue}x} \; {\color{purple}y} \\
+{\color{olive} T_1}; \; {\color{brown}T_2} \vdash & {\color{blue} \lambda}. \;\; {\color{purple}\lambda}. \;\; {\color{olive} \#3} \; {\color{blue}\#1} \; {\color{purple} \#0}
+\end{align*}
+
+
+\end{frame}
+
+\subsection{Multiple binders in one pattern}
+\begin{frame}{Multiple binders in one pattern}
+TODO
+\end{frame}
+\section{Challenges of the mechanization}
+\begin{frame}{Challenges of the mechanization}
+\begin{itemize}
+  \item nested pattern matching
+  \item handling multiple binders
+  \item mutually inductive types
+  \begin{itemize}
+    \item custom induction principle
+  \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Useful conclusions}
+\begin{itemize}
+  \item `unit' testing before starting proofs
+  \item proof stability
+  \begin{itemize}
+    \item predictive names
+    \item tactics using pattern matching to find right hypothesis regardless of name
+  \end{itemize}
+\end{itemize}
+\end{frame}
+
+\section{}
+\begin{frame}
+
+ {\Huge{Thank you :)}}
+ \\~\  \\~\
+ Questions?
+\end{frame}
+\end{document}
