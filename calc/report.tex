@@ -6,13 +6,14 @@
 \documentclass[runningheads]{article}
 \usepackage{graphicx}
 \usepackage[utf8]{inputenc}
+\usepackage{amsthm}
 \usepackage{amsfonts}
 \usepackage[fleqn]{amsmath}
 \usepackage{stmaryrd}
 \usepackage{listings}
 %\usepackage{minted}
 \usepackage[dvipsnames]{xcolor}
-\usepackage{hyperref}
+\usepackage[hidelinks]{hyperref}
 \usepackage[margin=1in]{geometry}
 \usepackage{pxfonts}
 \usepackage{todonotes}
@@ -22,6 +23,7 @@
 \usepackage{multicol}     % multi-column
 
 \usepackage{framed}
+
 
 %\newtheorem*{theorem-no-num}{Theorem}
 
@@ -74,9 +76,52 @@
 \newcommand{\strip}[1]{|#1|}
 
 
+%\lstset{emph={%  
+%    val, match, case%
+%  },emphstyle={\bfseries}%
+%}%
+\lstdefinelanguage{scala}{
+  morekeywords={abstract,case,catch,class,def,%
+    do,else,extends,false,final,finally,%
+    for,if,implicit,import,match,mixin,%
+    new,null,object,override,package,%
+    private,protected,requires,return,sealed,%
+    super,this,throw,trait,true,try,%
+    type,val,var,while,with,yield},
+  otherkeywords={=>,<-,<\%,<:,>:,\#,@},
+  sensitive=true,
+  morecomment=[l]{//},
+  morecomment=[n]{/*}{*/},
+  morestring=[b]",
+  morestring=[b]"""
+}
+
+\lstdefinestyle{myScalastyle}{
+  frame=tb,
+  language=scala,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{green},
+  stringstyle=\color{red},
+  frame=single,
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3,
+}
+
+\newtheorem*{theorem}{Theorem}
+\newtheorem*{lemma}{Lemma}
+
+
 \begin{document}
 % title
-\title{Mechanized proof for Quoted Pattern Matching in Scala 3}
+\title{A Mechanized Theory of Quoted Patterns}
 %\thanks{Supervised by} % if we want to thank someone/org.
 %
 % authors
@@ -94,7 +139,7 @@
 %formal
 \begin{abstract}
   %%% https://plg.uwaterloo.capaper/~migod/research/beckOOPSLA.html
-The pattern matching on code from the new macro system of Scala 3 is modelled by a calculus with staging. We present a mechanized proof in Coq of soundness of that calculus.
+The pattern matching on code from the new macro system of Scala 3 is modelled by a calculus called \calculus. We present a mechanized proof of soundness of the calculus in Coq .
 %
 %\keywords{Attendance System  \and Parameter tampering \and Exploit discovery.}
 \end{abstract}
@@ -102,115 +147,118 @@ The pattern matching on code from the new macro system of Scala 3 is modelled by
 %
 \section{Introduction}
 
-Scala 3 is getting a new macro system based on staged computation \cite{dottydocMacro} which also supports pattern matching over code values. The theory behind this addition is described in \textit{Quoted Pattern Matching in Scala 3} paper \cite{QPM}. 
+Scala 3 is getting a new macro system based on staged computation \cite{dottydocMacro} which also supports pattern matching over code values. The theory behind the staged computation is described in the paper \textit{A Theory of Quoted Code Patterns} \cite{QPM}. 
 
 For example, one can quote an expression and pattern match over it to transform it \footnote{Example from \cite{QPM}}
-\begin{verbatim}
+
+\begin{lstlisting}[style=myScalaStyle]
 val code = '{ println(1+2) }
-code match
-case '{ println($x)) } =>
-  '{ println("Result of " + ${Expr(x.show)} + ": " + $x) }
-  // the generated code will print: "Result of 1+2: 3"
-\end{verbatim}
+code match {
+  case '{ println($x)) } =>
+    '{ println("Result of " + ${Expr(x.show)} + ": " + $x) }
+}
+\end{lstlisting}
 
-The paper introduces $\lambda^{\RIGHTcircle}$ calculus that extends the STLC with quotes, splices and pattern matching over quoted code values. The calculus is explained in more detail in section \ref{sec:calculus}.
+The code above will print: \texttt{Result of 1+2: 3}.
 
-The goal of this semester project was to create mechanized proofs of soundness of that calculus, based on the paper proofs in the original paper. The project consists of 1366, of which 585 are the proofs and 455 are definitions. The definitions are explained in section \ref{sec:definitions} and the proofs in section \ref{sec:proving}.
+The language features are modelled by \calculus calculus which is an extension of \textit{simply typed lambda calculus} with quotes, splices and pattern matching over quoted code values. The calculus is explained in more detail in section \ref{sec:calculus}.
 
-While working on the proofs we had to solve some problems that may be useful in other works. We discuss these in section \ref{sec:discussion}.
+The goal of this project was to create a mechanized proof of the soundness of \calculus, based on the paper proofs in the original paper. The project consists of 1366 lines of Coq code\footnote{The code can be found at  \href{https://github.com/radeusgd/QuotedPatternMatchingProof/}{https://github.com/radeusgd/QuotedPatternMatchingProof/}}, of which 585 are proofs and 455 are definitions. The definitions are explained in section \ref{sec:definitions} and the proofs in section \ref{sec:proving}.
 
-\section{$\lambda^{\RIGHTcircle}$ calculus}
+While working on the proofs, we learned some lessons that may be useful in future work. We discuss these in section \ref{sec:discussion}.
+
+\section{\calculus calculus}
 \label{sec:calculus}
 
-The system is formalized in two parts - there is an \textit{implicitly-typed} language that is then elaborated to an \textit{explicitly-typed} variant in which every term is ascribed with its type. The ascribed types are used as evidence in the operational semantics.
+The system is formalized in two parts --- there is an \textit{implicitly-typed} language and an \textit{explicitly-typed} variant in which every term is ascribed with its type. There are elaboration rules for converting \textit{implicitly-typed} terms into \textit{explicitly-typed}.
 
-The type system has three forms: a base type for natural numbers ($Nat$), a function type ($T_1 \to T_2$) and a type for code values ($\square T$).
+There are three kinds of types: a base type for natural numbers ($Nat$), a function type ($T_1 \to T_2$) and a type for code values ($\square T$).
 
-The syntax contains the usual constructs from STLC: lambda abstraction, application and variables. Moreover it has a natural number constants and a fixpoint operator allowing recursion.
+The syntax contains the usual constructs from STLC: lambda abstractions, applications and variables. Moreover, it has natural number constants and a fixpoint operator to support recursion.
 
-It is then extended with quote ($\square e$) and splice ($\$e$) operators typical for staged computation, a \verb|lift| operator allowing to lift a numeric value to a code value returning that number and a simple pattern match construct ($e \sim p \; ? \; e_{succ} \; || \; e_{fail}$).
-The pattern match checks if $e$ matches the pattern $p$ and if it does, reduces to $e_{succ}$ where any bindings introduced by the pattern are available, otherwise it reduces to $e_{fail}$.
+It is then extended with quote ($\square e$) and splice ($\$e$) operators typical for staged computation, a \verb|lift| operator to lift a numeric value to a code value returning that number, and a simple pattern match construct ($e \sim p \; ? \; e_{succ} \; || \; e_{fail}$).
+The pattern match checks if $e$ matches the pattern $p$: if it does, the expression reduces to $e_{succ}$ where any bindings introduced by the pattern are available, otherwise it reduces to $e_{fail}$.
 
-A non-reducible value in this calculus can be a natural number, an unapplied lambda or a quoted plain code value. 
+A non-reducible value in this calculus can be a natural number, a lambda or a quoted plain code value. 
 
-A plain term can only contain the non-staged subsed of the calculus - lambdas, abstractions, constants and the fixpoint. Quotes, splices and pattern matching are excluded in plain terms.
+A plain term is defined as the non-staged subset of the calculus --- lambdas, abstractions, constants and fixpoint expressions. Quotes, splices and pattern matching are excluded in plain terms.
 
-Nesting of quotes is spliced is expressed by term's level - level 0 terms are the base terms that are executed and level 1 terms are the boxed code values (which can also contain level 0 terms by splicing). For simplicity, the calculus only supports the two levels.
+Nesting of quotes and splices is regulated by \textit{levels} - level 0 terms are the top-level terms that are executed and level 1 terms are boxed code (which can also contain level 0 terms by splicing). For simplicity, the calculus only supports two levels (so it is not possible to have code values containing code values).
 
-Below is an example of a term in the calculus, implementing a function that matches application of a function taking a number and replaces its argument with $42$, if the match fails the original code is returned. (We skip the explicit types for clarity):
+Below is an example of a term in the calculus. The code implements a function that matches application of a function taking a number and replaces its argument with $42$. If the match fails the original code is returned.
 
 \begin{equation*}
-  \Big(\lam{e}{\qtype{Nat}}{e \sim \big((\texttt{bind} [Nat \to Nat] \; f) \; (\texttt{bind} [Nat] \; x)\big) \; ? \; \square(\$f \; 42) \; || \; e} \Big) \;\; \square((\lam{x}{Nat}{x}) \; 10)
+  \Big(\lam{e}{\qtype{Nat}}{e \sim \big( \patapp{\patbind{f}{Nat \to Nat}}{\patbind{x}{Nat}} \big) \; ? \; \square(\$f \; 42) \; || \; e} \Big) \;\; \square((\lam{x}{Nat}{x}) \; 10)
 \end{equation*}
 
-This term will reduce to a code value with the same function but applied to the different argument: $\square((\lam{x}{Nat}{x}) \; 42)$.
+This term will match the suspended function application and replace the argument, thus it reduces to $\square((\lam{x}{Nat}{x}) \; 42)$.
 
 \section{Definitions in Coq}
 \label{sec:definitions}
-We define the \textit{explicitly-typed} variant of the calculus, as the safety properties are defined for it and the elaboration rules are quite simple.
+We define the \textit{explicitly-typed} language, as the safety properties are defined for it and the elaboration of the \textit{implicitly-typed} language is quite simple.
 
-Defining the calculus in Coq required some simplifications to be able to express it in a reasonable way. We tried to only allow simplifications that don't limit the expressivity of the language - they are mostly changing the syntax and simplifying some constructs. Most of the simplifications could be handled with some form of syntactic rewriting.
+Defining the calculus in Coq requires some simplifications. The simplifications don't limit the expressivity of the language.
 
-\subsection{Defining variable binding}
+\subsection{Variable Binding}
 
-Variable binding is a common issue that is encountered in all projects that try mechanizing proofs about calculi. 
+Variable binding is a common issue in the mechanization of calculi.
 
-On paper we just use textual names and define a capture-avoiding substitution operation. This is possible in Coq, but this kind of function is not so easy to define - we need to apply recursively on terms that are not structurally sub-terms of the main terms (because sometimes they may be renamed etc.). As Coq only accepts total functions, we need to show that the invocations are indeed on tems smaller in some way. Moreover the concept of $\alpha-\text{equivalence}$ becomes much more complicated because one has to define terms as their equivalence classes). This highly complicates the definitions and also makes it harder to reason about theorems.
+On paper we usually use textual names and define a capture-avoiding substitution operation. This is possible in Coq, but this kind of function is not so easy to define. We need to apply recursively on terms that are not structurally sub-terms of the main terms (because sometimes they may be renamed etc.). As Coq only accepts total functions, we need to show that the invocations are indeed on terms smaller in some way. Moreover, the concept of $\alpha$-\textit{equivalence} becomes much more complicated because one has to define properties in terms of equivalence classes of terms. This highly complicates the definitions and also makes it harder to reason about theorems.
 
 \subsubsection{De Bruijn indices}
 
-The usual solution to this problem is using De Bruijn indices \cite{Bruijn1972LambdaCN}. In a term encoded using De Bruijn indices, variable names are replaced by indices - numbers that indicate how many binders are in scope (in the expression tree) between the variable and the binder that this variable is referring to. For example the variable referring to the closest lambda gets index 0 (or depending on convention, it can start with 1, but we will start with 0), one referring to the closest lambda after that one gets 1 etc. In such notation, $\alpha-\text{equivalence}$ is reduced to syntactic equality and defining capture avoiding substitution is much simpler.
+The usual solution to this problem is using De Bruijn indices \cite{Bruijn1972LambdaCN}. In a term encoded using De Bruijn indices, variable names are replaced by indices --- numbers that indicate \textit{binder distance} (how many binders are in scope in the expression tree between the variable and the binder that this variable is referring to). In such notation, $\alpha-\text{equivalence}$ is reduced to syntactic equality and defining capture avoiding substitution is much simpler.
 
-For example, the identity function $\lambda x. \, x$ is encoded as $\lambda. \, \#0$ and the K combinator ${\color{blue}\lambda x}. \, {\color{OliveGreen}\lambda y}. \, {\color{blue}x}$ becomes ${\color{blue}\lambda}. \, {\color{OliveGreen}\lambda}. \, {\color{blue}\#1}$.
+For example, the identity function $\lambda x. \, x$ is encoded as $\lambda. \, \#0$ and the K combinator ${\color{blue}\lambda x}. \, {\color{OliveGreen}\lambda y}. \, {\color{blue}x}$ becomes ${\color{blue}\lambda}. \, {\color{OliveGreen}\lambda}. \, {\color{blue}\#1}$ \footnote{We will sometimes use colors to make it easier to see which index refers to which binder.}.
 
-All the free variables also have to be remapped to natural numbers. An index greater than the number of binders that it is surrounded by refers to free variables. For example the terms $\#0$ and $\lambda. \#1$ refer to the first free variable, $\#1$ to the second one etc.
-
-We can list the free variables in form of an environment next to the term, so that it is clearer what the free variables refer to. To clarify, we can compare a term using names and De Bruijn indices in which variables are colored accordingly to which binder (or free variable) they refer to:
-
+An index greater than the number of binders that it is surrounded by refers to free variables. We can list the free variables in form of an environment next to the term, so that it is clearer what those indices refer to. In the example below, we compare a term using names and the same term with De Bruijn indices in which variables are colored accordingly to which binder (or free variable) they refer to:
 \begin{align*}
  {\color{OliveGreen}\tpd{f}{T_1}}; \; {\color{brown}\tpd{g}{T_2}} \vdash & {\color{blue} \lambda x}. \; {\color{Plum}\lambda y}. \; {\color{OliveGreen}f} \; {\color{blue}x} \; {\color{Plum}y} \\
   {\color{OliveGreen} T_1}; \; {\color{brown}T_2} \vdash & {\color{blue} \lambda}. \;\; {\color{Plum}\lambda}. \;\; {\color{OliveGreen} \#3} \; {\color{blue}\#1} \; {\color{Plum} \#0}
 \end{align*}
 
-It is important to note, that the same index can point to different variables and the same variable can be pointed to by different indices - the index depends heavily on the context (as the binder distance is different in different contexts), as shown in the example below:
-
+It is important to note, that the same index can point to different variables and the same variable can be pointed to by different indices --- the index depends heavily on the context (as the \textit{binder distance} is different in different contexts), as shown in the example below:
 \begin{align*}
 {\color{OliveGreen}\tpd{f}{T_1}} \vdash & {\color{blue} \lambda x}. \; ({\color{Plum}\lambda y}. \; {\color{OliveGreen}f} \; {\color{blue}x} \; {\color{Plum}y}) \; {\color{blue}x} \\
 {\color{OliveGreen}T_1} \vdash & {\color{blue} \lambda}. \;\; ({\color{Plum}\lambda}. \; {\color{OliveGreen}\#2} \; {\color{blue}\#1} \; {\color{Plum}\#0}) \; {\color{blue}\#0}
 \end{align*}
 
-When substituting, it is important to keep track of the index - when traversing inside of a binder it has to be updated to still refer to the same variable.
-For example, when reducing ${\color{blue}T_1}; T_2 \vdash (\lambda. \, \lambda. \, \#1) \; (\lambda. \, {\color{blue}\#2})$, $\#2$ refers to the second free variable, after $\beta$-reduction, we get ${\color{blue}T_1}; T_2 \vdash \lambda. \lambda. \, {\color{blue}\#3}$ - the substituted term had to be shifted to still refer to the second free variable (as it is now behind not one but two binders).
+During substitution, it is important to keep track of the index. When traversing inside of a binder, free variables in the substitute term have to be updated to still refer to the same variable.
+For example, given the term $(\lambda. \, \lambda. \, \#1) \; (\lambda. \, {\color{blue}\#2})$, where the index ${\color{blue}\#2}$ refers to the second free variable, after $\beta$-reduction, we get $\lambda. \lambda. \, {\color{blue}\#3}$ --- the substitute term has to be shifted to still refer to the second free variable (as it is now behind not one but two binders).
 
 
-\subsubsection{DbLib}
+\subsubsection{\textit{DbLib}}
 
-As handling variable binding is common to nearly all calculi formalizations, there are some Coq libraries that help automating parts of reasoning about them. In this project we are using the DbLib library \cite{dblib}, some other existing solutions are discussed in section \ref{binderlibs}.
+As handling variable binding is common to nearly all calculi formalizations, there are some Coq libraries that help automate parts of reasoning about them. In this project we are using the \textit{DbLib} library \cite{dblib}, some other choices are discussed in section \ref{binderlibs}.
 \label{traverse}
-When using DbLib we freely define our syntactic forms as some inductive type. We have two types - typed terms (\texttt{typedterm}) and untyped terms (\texttt{term}), and we can substitute an untyped term into both of these types. To use the automation facilities provided by the library, we need to define:
+When using \textit{DbLib} we freely define our syntactic forms as some inductive type. We have two mutually inductive types - typed terms (\texttt{typedterm}) and untyped terms (\texttt{term}), and we can substitute an untyped term into both of these types. To use the automation facilities provided by the library, we need to define:
 \begin{itemize}
-  \item an instance of \texttt{Var} typeclass which is used for constructing variables - it requires a function \texttt{var} that takes a De Bruijn index (which is simply a natural number) and returns an instance of the type that we will be substituting (in our case \texttt{term}); for us the instance is just calling the constructor \texttt{var x = Var x}
-  \item instances of \texttt{Traverse} typeclass which requires a function \texttt{traverse} taking 3 parameters: a function \texttt{f} representing the operation that is applied to the term-tree, a natural number \texttt{l} representing the current level and a term \texttt{t} that is traversed. It has to recursively traverse all subterms in \texttt{t}, increasing \texttt{l} when entering a binder, and each encountered instance of a variable \texttt{Var x} has to be replaced with \texttt{f l x}.
+  \item an instance of the typeclass \texttt{Var} which is used for constructing variables - it requires a function \texttt{var} that takes a De Bruijn index (which is simply a natural number) and returns an instance of the type that we will be substituting (in our case \texttt{term}); for us the instance is just calling the constructor \texttt{var x = VAR x}\footnote{The constructor is capitalized (\texttt{VAR}) instead of just \texttt{Var} to avoid name clash with the mentioned typeclass.}
+  \item instances of the typeclass \texttt{Traverse} which requires a function \texttt{traverse} taking 3 parameters: a function \texttt{f} representing the operation that is applied to the term-tree, a natural number \texttt{l} representing the current level and a term \texttt{t} that is traversed. It has to recursively traverse all subterms in \texttt{t}, increasing \texttt{l} when entering a binder, and each encountered instance of a variable \texttt{VAR x} has to be replaced with \texttt{f l x}.
 \end{itemize}
-Afterwards some lemmas have to be proven to show that the \texttt{traverse} function satisfies the required constraints - for example it has to be injective. If the function is defined reasonably, these properties are derived automatically by tactics provided by the library.
+Afterwards some lemmas have to be proven to show that the \texttt{traverse} function satisfies the required constraints. For example it has to be injective. If the function is not overly complex, these properties are derived automatically by tactics provided by the library.
 
-Once this is defined, substitution, shift etc. are automatically derived by using the \texttt{traverse} function.
+Once this is defined, substitution, shift etc.\@ are automatically derived from the \texttt{traverse} function.
 
-\subsection{Defining patterns}
+\subsection{Patterns}
 
-Defining patterns is particularly complicated as the patterns can be arbitrarily nested, so a pattern match could introduce an arbitrary amount of bindings. This is possible to handle, but is much harder to reason about. To simplify the reasoning, we forbid nested patterns. This does not limit the expressivity of the calculus as any nested pattern match can be converted to a series of non-nested patterns.
+Defining patterns is particularly complicated as the patterns can be arbitrarily nested, so a pattern match could introduce an arbitrary amount of bindings. This is possible to handle, but is much harder to mechanize. To simplify the mechanization, we forbid nested patterns. This does not limit the expressivity of the calculus as any nested pattern match can be converted to a series of non-nested patterns.
+
 
 For example, we can convert 
-\[
-e \sim (\texttt{lam}[Nat \to Nat] \, f) \; 42 \; ? \; f \; \square(10) \; || \; e_{else}
-\] into \[
-e \sim (\texttt{MatchApp} \, [Nat \to Nat] \, a_1 \, [Nat] \, a_2) \; ? \; \Bigg(a_1 \sim (\texttt{MatchLam}[Nat \to Nat] \, f) \; ? \; \big(a_2 \sim \texttt{MatchNat} \, 42 \; ? \; (f \; \square(10))\; || \; e_{fail}\big)\; || \; e_{fail}\Bigg)\; || \; e_{fail}
-\]
+\begin{equation*}
+\patmat{e}{(\patapp{(\patlam{f}{Nat \to Nat})}{42})}{\app{f}{\square(10)}}{e_{fail}}
+\end{equation*}
+into
+\begin{align*}
+e \sim & (\texttt{MatchApp} \, [Nat \to Nat] \, a_1 \, [Nat] \, a_2) \; ? \\
+&\Bigg(a_1 \sim (\texttt{MatchLam}[Nat \to Nat] \, f) \; ? \; \big(a_2 \sim \texttt{MatchNat} \, 42 \; ? \; (f \; \square(10))\; || \; e_{fail}\big)\; || \; e_{fail}\Bigg)\; || \; e_{fail}
+\end{align*}
 (where \texttt{MatchApp} pattern is a special pattern which matches an application and binds the first and second term to $a_1$ and $a_2$ respectively).
 
-After simplifying to non-nested patterns, the \texttt{bind} pattern is not useful anymore, so we remove it (in non-nested approach it would be equivalent to a let statement). However all of the other patterns that can bind something are changed in a way that they emulate containing the \texttt{bind}, as shown in the example above. Ultimately, we have the following patterns: Nat, Var, Fix, App, Unlift, Abs, Lam.
+%After simplifying to non-nested patterns, the \texttt{bind} pattern is not useful anymore, so we remove it (in non-nested approach it would be equivalent to a let statement). However all of the other patterns that can bind something are changed in a way that they emulate containing the \texttt{bind}, as shown in the example above. Ultimately, we have the following patterns: Nat, Var, Fix, App, Unlift, Lam.
 
-Even after the simplification, the App pattern still introduces two variable bindings, so we need to be able to support it. This is still much simpler than the arbitrary amount of bindigs that we started with.
+Even after the simplification, the App pattern still introduces two variable bindings, so we need to be able to support it. This is still much simpler than the arbitrary amount of bindings that we started with.
 
 We first tried to define the patterns as a separate inductive definition and have a single syntactic form for the pattern matching:
 \begin{verbatim}
@@ -219,7 +267,8 @@ Inductive pattrn :=
 | PVar (x : DeBruijnIndex)
 | PBindUnlift
 | PBindApp (T1 T2 : type)
-| PBindLam (T : type).
+| PBindLam (T : type)
+| PBindFix.
 
 Inductive typedterm :=
 | TypedTerm (u: term) (t: type)
@@ -233,9 +282,9 @@ with term :=
 | PatternMatch (e : typedterm) (pat : pattrn) (success failure : typedterm).
 \end{verbatim}
 
-Unfortunately this made us have 3 syntactic forms (untyped terms, typed terms and patterns) and it seemed to be too much for DbLib - the automatic facilities that help us prove the basic lemmas to make the library usable failed and I was also unable to fix the proofs manually.
+Unfortunately this gives rise to 3 syntactic forms (untyped terms, typed terms and patterns) and it seemed to be too much for \textit{DbLib} --- the automatic facilities that help us prove the basic lemmas to make the library usable failed and I was also unable to fix the proofs manually.
 
-So in the end we created a separate syntactic form for each pattern. This may look strange, but it is in fact equivalent to the previous formulation, it's just a technical / notational difference.
+So in the end we created a separate syntactic form for each pattern. This may look strange, but it is in fact equivalent to the previous formulation, the difference is only technical / notational.
 
 \begin{verbatim}
 Inductive typedterm :=
@@ -257,26 +306,18 @@ with term :=
 | MatchFix (e : typedterm) (T : type) (es ef : typedterm).
 \end{verbatim}
 
-One other modification that we had to apply here is to the variable matching pattern. This pattern checks if the boxed code is a reference to some variable, so after the De Bruijn translation, this pattern also contains a De Bruijn index for the variable that is matched (see \texttt{PVar} in the first listing). This occurrence is unusual, because we need to update it when shifting all indices in a term, so that it always refers to the original variable (why we have to shift is explained in the previous section). It has to be treated differently, because it should never be substituted with some concrete value.
-
+One other modification that we have to apply here is to the variable matching pattern. This pattern checks if the boxed code is a reference to some variable, so after the De Bruijn translation, this pattern also contains a De Bruijn index for the variable that is matched (see \texttt{PVar} in the first listing). This occurrence is unusual, because we need to update it when shifting all indices in a term, so that it always refers to the original variable (why we have to shift is explained in the previous section). It has to be treated differently, because it should never be substituted with some concrete value.
+\todo[inline]{Maybe it's easier to see the type checking problem if you list the type signature of "traverse" and "f", as well as the case for "PVar" or "MatchVar" in traverse.}
 However in the library that we use, the \texttt{traverse} function is defined in such a way that during traversal we replace each variable with the result of calling \texttt{f l x} which handles all renaming and returns a new instance of the variable using the constructor from the \texttt{Var} typeclass. It is possible to overcome this by unpacking the result, checking if it indeed is an instance of \texttt{VAR} and getting the index from it, but this approach breaks the properties that the library requires of \texttt{traverse}.
 
-Instead, we replace the raw De Bruijn index in \texttt{MatchVar} with an arbitrary term. This satisfies all the constraints required by the library and ensures that this index is updated when necessary. Unfortunately this also allows for ill-formed terms, where we do variable match over something other than a variable. This issue is however addressed in the typing rules - only instances of \texttt{MatchVar} in which \texttt{x} has the form \texttt{VAR y} are accepted. Thus, when we prove Preservation, we also prove that this variable is never substituted for (as the term resulting from such substitution would be ill-typed).
+Instead, we replace the raw De Bruijn index in \texttt{MatchVar} with an arbitrary term. This satisfies all the constraints required by the library and ensures that this index is updated when necessary. Unfortunately this also allows for terms that are ill-formed syntactically, (variable match over something other than a variable). This issue is however addressed in the typing rules --- only instances of \texttt{MatchVar} in which \texttt{x} has the form \texttt{VAR y} are accepted. Thus, when we prove Preservation, we also prove that this variable is never substituted for (as the term resulting from such substitution would be ill-typed).
 
-\subsection{Final form of the definitions}
+\subsection{Semantics and Typing}
 \label{finalformencoding}
-Most of syntactic details have already been described in the previous section.
-
-Another important change from the paper version is the typing environment. On paper it is defined as a (partial) mapping from variable names to types and levels.
-DbLib is also providing support for using environments with De Bruijn indices, so we used the approach suggested by the library authors - our environment is a list of options - such a list of options can be understood as a partial mapping from natural numbers and it integrates very well with operations on DeBruijn indices. For example when the environment is extended while going inside a binder, the new type is just prepended to the list - this both handles the new type and the fact that other indices are shifted.
-
-We yet had to consider how to handle the levels in the typing environment. One possible solution could be to have a separate environment for both levels - so our \texttt{TypEnv} type would be \texttt{list (option type) * list (option type)}. However binders do not distinguish the levels that they bind, so this approach wouldn't work. Instead we store the level alongside the type in the mapping - so our \texttt{TypEnv} type is \texttt{list (option (level * type))}. The judgement from the original paper $\Gamma(x^i) = T$ is expressed as \texttt{lookup $x$ $\Gamma$ = Some (L$i$, $T$)}.
-
-Extending the environment, ie. $\Gamma; x^i : T$ is expressed as \verb|insert x (Li, T) |$\Gamma$, where the new \verb|x| is the De Bruijn index corresponding to $x$. In the typing rules we only extend the environment by introducing a new binder which is the closest binder now (ie. its index will be 0) and all the other binder's indices are shifted by 1. This operation is expressed by \verb|insert 0 (Li, T) |$\Gamma$.
 
 The typing judgement is defined as an inductive type \texttt{TypEnv $\to$ Level $\to$ typedterm $\to$ type $\to$ Prop} and the small-step semantics relation is defined as \texttt{Level $\to$ typedterm $\to$ typedterm $\to$ Prop}. 
 
-We use Coq's Notations to make our judgements more easily readable. The typing judgement is expressed as \texttt{G $\vdash$(L) e $\in$ T} and the semantics relation as \texttt{e1 -->(L) e2} which quite closely resembles the notation used in the paper.
+We use Coq's Notations to make our judgements more readable. The typing judgement is expressed as \texttt{G $\vdash$(L) e $\in$ T} and the semantics relation as \texttt{e1 -->(L) e2} which quite closely resembles the notation used in the paper.
 
 We also define a relation \texttt{evaluates} which is the reflexive transitive closure of small-step semantics at level 0 that is used in tests. For example we can define a term representing applying the identity function to a number and prove that it typechecks and evaluates correctly:
 \begin{lstlisting}[mathescape=true]
@@ -291,20 +332,43 @@ Lemma id_app_evals : evaluates id_applied (Nat 42 : TNat).
 Qed.
 \end{lstlisting}
 
+Another important change from the paper version is the typing environment. On paper it is defined as a (partial) mapping from variable names to types and levels.
+\textit{DbLib} is also providing support for using environments with De Bruijn indices. We used the approach suggested by the library authors --- our environment is represented by a partial mapping from natural numbers to types. It is defined as a list of options. This integrates very well with operations on De Bruijn indices. For example, when the environment is extended while going inside a binder, the new type is just prepended to the list. This both handles the new type and the fact that other indices are shifted.
+
+As our typing environment has to keep track of level of each variable, the final \texttt{TypEnv} type is \texttt{list (option (level * type))}. The judgement from the original paper $\Gamma(x^i) = T$ is expressed as \texttt{lookup $x$ $\Gamma$ = Some (L$i$, $T$)}.
+
+Extending the environment, i.e. $\Gamma; x^i : T$ is expressed as \verb|insert x (Li, T) |$\Gamma$, where the new \verb|x| is the De Bruijn index corresponding to $x$. In the typing rules we only extend the environment by introducing a new binder which is the closest binder now (i.e. its index will be 0) and all the other binder's indices are shifted by 1. This operation is expressed by \verb|insert 0 (Li, T) |$\Gamma$.
+
+So for example, the abstraction rule
+\begin{framed}
+\infrule{ \Gamma,x^i{:}T_1 \vdash^i t_2 \in T_2 }{\Gamma \vdash^i \tpd{(\lam{x}{T_1}{t_2})}{T_1{\to}T_2} \; \in \; T_1 \to T_2}
+\end{framed}
+is expressed as
+\begin{lstlisting}[mathescape=true]
+| T_Abs : forall Li G T1 T2 t2,
+    insert 0 (Li, T1) G $\vdash$(Li) t2 $\in$ T2 ->
+    G $\vdash$(Li) (Lam T1 t2 : T1 ==> T2) $\in$ (T1 ==> T2)
+\end{lstlisting}
 
 
-\section{Proving soundness}
+
+\section{Proving Soundness}
 \label{sec:proving}
-We want to prove Progress: If $\emptyset \vdash^0 t \in T$, then $t$ is a value or there exists $t'$ such $t \longrightarrow^0 t'$
-\\
-and Preservation: If $\Gamma \vdash^i t \in T$ and $t \longrightarrow^i t'$, then $\Gamma \vdash^i t' \in T$.
-
+We want to prove
+\begin{theorem}[Progress]
+ If $\emptyset \vdash^0 t \in T$, then $t$ is a value or there exists $t'$ such $t \longrightarrow^0 t'$ 
+\end{theorem}
+and
+\begin{theorem}[Preservation]
+If $\Gamma \vdash^i t \in T$ and $t \longrightarrow^i t'$, then $\Gamma \vdash^i t' \in T$.
+\end{theorem}
 
 First we had to reformulate the theorems into our language. Thanks to Coq's notations they don't differ much:
 \begin{lstlisting}[mathescape=true]
 Theorem Progress : forall t T,
   $\emptyset$ $\vdash$(L0) t $\in$ T ->
   isvalue t \/ exists t', t -->(L0) t'.
+
 Theorem Preservation : forall t1 T G L,
   G $\vdash$(L) t1 $\in$ T ->
   forall t2,
@@ -312,15 +376,19 @@ Theorem Preservation : forall t1 T G L,
   G $\vdash$(L) t2 $\in$ T.
 \end{lstlisting}
 
-We have approached the proofs by first trying to prove a subset of the calculus corresponding to STLC, as a warm-up. Then we have added quotes, splices and lift and fixed the proofs. Later we have added the pattern matching and at the very end the fixpoint operator. Adding the features step-by-step required rewriting a substantial part of the proofs and sometimes even reformulating some basic definitions. But it also helped to keep the scope more manageable by dividing the proving effort into smaller pieces. The progressive approach also helped me learn piece-by-piece and better understand the paper proofs that I've been basing on.
-
 \subsection{Induction}
 
+\todo[inline]{This section is difficult to understand and the readers are easy to get lost. Try to make it more understandable by showing the relevant Coq code if it's clean or by presenting the insight/tricks using simple examples.
+
+Abstract insights/tricks and present them using simple examples without specifics of the project is a very good practice in writing.
+
+Otherwise, interested readers will just check Coq source code to understand more.
+}
 As many proofs in programming language theory rely on induction on the structure of the term or the typing judgement, we needed appropriate induction principles.
 
-One of the first challenges was that our definitions of terms and typedterms are mutually inductive. The default induction principles generated by Coq don't take this into account, so induction proofs using them are often too weak (the automatically generated principle doesn't have all the assumptions that are needed for it to be useful).
+One of the first challenges was that our definitions of terms and typedterms are mutually inductive. The default induction principles generated by Coq don't take this into account, so induction principles generated for them are too weak (the automatically generated principle doesn't have all the assumptions that are needed for it to be useful).
 
-First we used Coq's \verb|Scheme| directive that allows to define induction principles that are mutually inductive, this already gives us an induction principle that has all the necessary assumptions. However, the induction principles require two properties that we will be proving - one for the typedterm and another for un-typed terms (which is of course expected, because in general we can't derive one from the other for arbitrary mutually inductive types). This is however not too convenient, because when using induction we have just one property we want to prove (usually for typedterms) and coming up with this dual version for un-typed terms for every instance of syntactic induction would be very cumbersome.
+First we used Coq's \verb|Scheme| directive that allows to define induction principles that are mutually inductive, this already gives us an induction principle that has all the necessary assumptions. However, the induction principles require two properties that we will be proving - one for the typedterm and another variant for un-typed terms (which is of course expected, because in general we can't derive one from the other for arbitrary mutually inductive definitions). This is however not too convenient, because when using induction we have just one property we want to prove (usually for typedterms) and coming up with this dual version for un-typed terms for every instance of syntactic induction would be very cumbersome.
 
 So to help with that, we define our own induction principle that combines the two in such a way, that it requires only a property we want to prove for typedterms and extends it to terms by ascribing to them an arbitrary type. We can prove its correctness using the principle automatically generated earlier.
 
@@ -333,16 +401,17 @@ which ensures that the type ascribed has to match the type resulting from the ty
 
 \subsection{Progress}
 
-The progress theorem in the original proof relied mostly on an auxiliary lemma - \textit{Level Progress}. It is defined in two parts, namely:
-\\
+The progress theorem in the original proof relies mostly on an auxiliary lemma - \textit{Level Progress}. It is defined in two parts, namely:
+\begin{lemma}[Level Progress]
 For any given term $t$, we have:
 \begin{itemize}
   \item[(1)]  If $\Gamma^{[1]} \vdash^0 t \in T$, then $t$ is a value or  there exists $t'$ such that $t \longrightarrow^0 t'$.
   \item[(2)] If $\Gamma^{[1]} \vdash^1 t \in T$ and $(\square t) : \square T$ is not a value,  then there exists $t'$ such that $t \longrightarrow^1 t'$.
 \end{itemize}
+\end{lemma}
 Where $\Gamma^{[1]}$ means that the environment only contains level 1 variables.
 
-Unsurprisingly, when proving by induction, each case needs the other. One approach to formulating this in Coq would be to define mutually recursive lemmas using the \verb|Lemma ... with| syntax. This is however quite prone to mistakes, because the fixpoint decreasing check is only done at the end.
+Unsurprisingly, when proving by induction, each case needs the other. One approach to formulating this in Coq would be to define mutually recursive lemmas using the \verb|Lemma ... with| syntax. This is however quite prone to mistakes, because the fixpoint check is only done at the end, so it is easy to create a self-referencing proof that will be rejected only after typing \texttt{Qed} at its end.
 
 Instead we formulate this as a single lemma with a disjunction:
 \begin{lstlisting}[mathescape=true]
@@ -353,9 +422,9 @@ Lemma LevelProgress : forall t G T L,
   \/ (L = L1 /\ (not (isvalue (Quote t : $\square$T)) -> exists t', t -->(L1) t')).
 \end{lstlisting}
 
-This allows us to prove both cases in a single proof relying on syntactic induction on $t$ which thanks to the induction principle defined earlier provides us with all the necessary assumptions.
+This allows us to prove both cases based on syntactic induction on $t$. Thanks to the induction principle defined earlier, we have all the necessary assumptions.
 
-In that proof, in each case we \verb|destruct L| getting two cases where \verb|L| has a concrete value. In such case, in the inductive hypothesis's conclusion only one of the alternatives is true, so we proved two lemmas that allow us to simplify the inductive hypothesis to contain only the possible alternative.
+In the proof, in each case we \verb|destruct L| getting two cases where \verb|L| has a concrete value. Therefore, in the inductive hypothesis conclusion only one of the alternatives is true. We proved two helper lemmas that can be used simplify the inductive hypothesis, detecting the possible alternative and eliminating the impossible one.
 
 The \textit{Level Progress} proof is quite long as, beside some trivial cases, each syntactic form required a slightly different treatment. However after proving that lemma, the \textit{Progress} theorem is a very simple corollary.
 
@@ -363,11 +432,12 @@ The \textit{Level Progress} proof is quite long as, beside some trivial cases, e
 
 To prove Preservation we need two auxiliary lemmas - \textit{Weakening} and \textit{Substitution}. These are closely related to handling variables in the environment, so they have to be quite deeply modified when translating to De Bruijn indices.
 
-Weakening is originally defined as 
-\\
+\textit{Weakening} is originally defined as 
+\begin{lemma}[Weakening]
 If $\Gamma^{[1]} \vdash^i t \in T, x \not\in FV(\Gamma)$, then $\Gamma, x^j : T \vdash^i t \in T$.
+\end{lemma}
 
-The modification is rather intuitive, as explained in section \ref{finalformencoding}, extending the environment is defined using \verb|insert| and instead of a variable name $x$ we have an index \verb|x|. The fact that $x \not\in FV(\Gamma)$ is expressed by showing the property for \verb|shift x t| which shifts the indices inside of \verb|t| so that the \verb|x|th variable is not bound in that term, and other indices are modified in the same way as they were shifted by the \verb|insert|, so that they still correspond to each other. So it is defined as:
+The modification is rather intuitive, as explained in section \ref{finalformencoding}, extending the environment is defined using \verb|insert| and instead of a variable name $x$ we have an index \verb|x|. The fact that $x \not\in FV(\Gamma)$ is expressed by showing the property for \verb|shift x t| which shifts the indices inside of \verb|t| so that the \verb|x|th variable is not bound in that term, and other indices are modified in the same way as they would have been shifted by \verb|insert|, so that they still correspond to the original binders. It is defined as:
 \begin{lstlisting}[mathescape=true]
 Lemma Weakening: forall G L t T,
   G $\vdash$(L) t $\in$ T ->
@@ -375,89 +445,88 @@ Lemma Weakening: forall G L t T,
   insert x (L', T') G = G' ->
   G' $\vdash$(L) (shift x t) $\in$ T.
 \end{lstlisting}
-It is also important that we split the universal quantification in two parts. The lemma where all of the variables are defined in the first \verb|forall| clause would be equivalent. However when using the default induction principle, we would get too weak inductive hypotheses (because the \verb|x| etc. would be fixed instead of being universally quantified).
 
 \paragraph{}
 
-The Substitution lemma is a bit more complicated than usual:
-\\
+The \textit{Substitution} lemma is a bit more complicated than usual:
+\begin{lemma}[Substitution]
 If (1) $\Gamma \vdash^j t_1 \in T_1$, (2) $\Gamma, x^j : T_1 \vdash^i t_2 \in T_2$ and
 (3) $j = 0$ or $t_2$ does not contain pattern matches, then $\Gamma \vdash^i t_2[x \mapsto t_1] \in T_2$.
+\end{lemma}
 
-The first two conditions are as usual, the third one is a bit exceptional but it is necessary for the lemma to be provable.
-The third condition says that we can substitute inside arbitrary terms for variables at level 0, but when substituting a variable at level 1, the term that we are substituting into cannot contain any pattern matches. Without this assumption, we may arrive at a situation when we are substituting a variable inside a pattern matching a particular variable (ie. $(t \sim x \; ? \; t_a \; || \; t_b)[x \mapsto t_c]$), we would get a result that is not even syntactically correct or typable. So we just disallow this kinds of situations (note that the variable pattern only applies to level 1 variables). At first it may seem like a too big restriction, making the lemma too weak. But in fact this is enough, because level 1 substitutions only happen when executing pattern matching and in pattern matches, we only allow to proceed with code values that contain plain terms (ie. terms without quotes, splices and pattern matches).
+The first two conditions are usual, the third one is exceptional.
+The third condition says that we can substitute inside arbitrary terms for variables at level 0, but when substituting a variable at level 1, the term that we are substituting into cannot contain any pattern matches. Without this assumption, we may arrive at a situation when we are substituting a variable inside a pattern matching a particular variable (ie. $(t \sim x \; ? \; t_a \; || \; t_b)[x \mapsto t_c]$), we would get a result that is not even syntactically correct nor typable. So we just disallow this kinds of situations (note that the variable pattern only applies to level 1 variables). 
+
+At first it may seem like a too big restriction, making the lemma too weak. But in fact this is enough, because we are mostly doing substitutions at level 0. The only situation when we are substituting a level 1 variable is when lifting a lambda in the $\patlam{e}{T}$ pattern\footnote{See figure \ref{fig:pattern-semantics} in the Appendix for details.}. But in this particular case, we know that the whole lambda term is plain, so the $e$ inside it does not contain the pattern match, as required.
 
 Once we understand the nuance about the third condition, translating the lemma into Coq is quite simple, so we skip it.
 
 \paragraph{}
 
-The Preservation proof also uses a few more quite obvious auxiliary lemmas to simplify some properties. For example we prove that a plain term doesn't contain pattern matches (which is almost by definition) or that renaming (ie. shifting indices in the De Bruijn formulation) doesn't introduce pattern matches if they weren't present originally. % As in the language's rules we also define a simplified version of substitution lemma that is closer to the notation used in the definitions and is a direct corollary of the main Substitution lemma.
+The Preservation proof also uses a few more auxiliary lemmas to simplify some properties. For example we prove that a plain term doesn't contain pattern matches (which is almost by definition) or that renaming (ie. shifting indices in the De Bruijn formulation) doesn't introduce pattern matches if they weren't present originally. % As in the language's rules we also define a simplified version of substitution lemma that is closer to the notation used in the definitions and is a direct corollary of the main Substitution lemma.
 
-We extensively use the tactics provided by DbLib for dealing with substitutions and define some more tactics specific to our formulation that help simplifying substitutions in the proof context.
+We extensively use the tactics provided by \textit{DbLib} for dealing with substitutions and define some more tactics specific to our formulation that help simplifying substitutions in the proof context.
 \section{Discussion}
 \label{sec:discussion}
 \subsection{Multiple binders at once}
 \label{multibind}
 
-Patterns that represent multiple binders and are substituted at once have to be considered very carefully as it is not that trivial to judge which indices to shift and how.
+Patterns that represent multiple binders and are substituted at once have to be considered very carefully as it is non-trivial to judge which indices to shift and how.
 
-First, let's see how reducing a normal lambda abstraction works. For clarity, to show the intermediate step, we define the substitution operation $(e_1)[e_2/]$ that substitutes all De Bruijn indices equal to 0 in $e_1$ with $e_2$ and decreases other indices (to indicate that after substitution we have got rid of one binder). As the substitution operation is an intermediate step, the enclosing lambda is removed already, but the indices are not yet shifted, so to keep the De Bruijn indices consistent, we treat the parentheses as a binder, so that the expression inside is most closely bound to what will be substituted. With these definitions, reducing a lambda application will proceed as follows:
-
+First, let's see more closely how beta-reduction works with De Bruijn indices. For clarity, to show the intermediate step, we define the substitution operation $(e_1)[e_2/]$ that substitutes all De Bruijn indices equal to 0 in $e_1$ with $e_2$ and decreases other indices (to indicate that after substitution we have got rid of one binder). As the substitution operation is an intermediate step, the enclosing lambda is removed already, but the indices are not yet shifted, so to keep the De Bruijn indices consistent, we treat the parentheses as a binder, so that the expression inside is most closely bound to what will be substituted. With these definitions, beta-reduction will proceed as follows:
 \begin{align*}
 {\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash ({\color{Fuchsia}\lambda}. \; {\color{Fuchsia}\#0} \; {\color{OliveGreen}\#1}) \; {\color{blue}\#1} \\
 {\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}({\color{Fuchsia}\#0} \; {\color{OliveGreen}\#1})}[{\color{blue}\#1}/] \\
 {\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{blue}\#1} \; {\color{OliveGreen}\#0}
 \end{align*}
 
-Now, let's analyse how we can define matching a 2-element tuple (in our case we were matching an application, but we choose this example as it is more familiar). Let's define $\texttt{unpack} (e_1, e_2) \texttt{ as } (x_1, x_2) \texttt{ in } t$ as the operation that deconstructs a tuple $(e_1, e_2)$ and binds in $e_1$ to $p_1$ and $e_2$ to $p_2$ in $t$.
+Now, let's analyse how we can define matching a 2-element tuple (in our case we were matching an application, but we have chosen this example as it is more familiar). Let's define $\texttt{unpack } e \texttt{ as } (x_1, x_2) \texttt{ in } t$ as the operation that deconstructs a tuple $e = (e_1, e_2)$ and binds $e_1$ to $x_1$ and $e_2$ to $x_2$ in $t$.
 
-As we are in the realm of De Bruijn indices, we modify that syntax to just $\texttt{unpack} (e_1, e_2) \texttt{ as } (\bullet, \bullet) \texttt{ in } t$ where the two bullets count as two binders. Inside of $t$, the closest De Bruijn index (0) is bound to $e_2$ and the next one (1) to $e_1$ (we use the order that may seem reversed but that is to express that $e_2$ corresponds to the second bullet which is closer to $t$ than the one that $e_1$ corresponds to). To illustrate, $\texttt{unpack} (e_1, e_2) \texttt{ as } ({\color{blue}\bullet}, {\color{OliveGreen}\bullet}) \texttt{ in } ({\color{blue}\#1} \; {\color{OliveGreen}\#0}) \longrightarrow (e_1 \; e_2)$.
+As we are in the realm of De Bruijn indices, we modify that syntax to $\texttt{unpack } e \texttt{ as } (\bullet, \bullet) \texttt{ in } t$ where the two bullets count as two binders. Inside of $t$, the closest De Bruijn index (0) is bound to $e_2$ and the next one (1) to $e_1$ (we use the order that may seem reversed but that is to express that $e_2$ corresponds to the second bullet which is closer to $t$ than the one that $e_1$ corresponds to which is consistent with the indices representing the \textit{binder distance}). To illustrate, $\texttt{unpack } (e_1, e_2) \texttt{ as } ({\color{blue}\bullet}, {\color{OliveGreen}\bullet}) \texttt{ in } ({\color{blue}\#1} \; {\color{OliveGreen}\#0}) \longrightarrow (e_1 \; e_2)$.
 
-It is tempting to define the reduction rule as $\texttt{unpack} (e_1, e_2) \texttt{ as } (\bullet, \bullet) \texttt{ in } t \longrightarrow ((t)[e_2/])[e_1/]$. But let's analyse how that would work on an example with free variables:
-
+It is tempting to define the reduction rule as $\texttt{unpack } (e_1, e_2) \texttt{ as } (\bullet, \bullet) \texttt{ in } t \longrightarrow ((t)[e_2/])[e_1/]$. But let's analyse how that would work on an example with free variables:
 \begin{align*}
-{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash \texttt{unpack} ({\color{blue}\#1}, {\color{OliveGreen}\#0}) \texttt{ as } ({\color{Fuchsia}\bullet}, {\color{BurntOrange}\bullet}) \texttt{ in } ({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0}) \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash \texttt{unpack } ({\color{blue}\#1}, {\color{OliveGreen}\#0}) \texttt{ as } ({\color{Fuchsia}\bullet}, {\color{BurntOrange}\bullet}) \texttt{ in } ({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0}) \\
 {\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}(}{\color{BurntOrange}({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0})}[{\color{red}\#0}/]{\color{Fuchsia})}[{\color{blue}\#1}/] \\
 {\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}(}{\color{Fuchsia}\#0} \; {\color{red}\#0}{\color{Fuchsia})}[{\color{blue}\#1}/] \\
 {\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash ({\color{blue}\#1} \; {\color{blue}\#1})
 \end{align*}
 
-We would expect to get $({\color{blue}\#1} \; {\color{OliveGreen}\#0})$ as the result, but instead we get $({\color{blue}\#1} \; {\color{blue}\#1})$. We can see that something is wrong in the second line already. The ${\color{OliveGreen}\#0}$ that will be substituted, is an index 0, but it actually went inside the scope of the ${\color{Fuchsia}\bullet}$ binder (represented in the substitution operation as the parentheses ${\color{Fuchsia}( \; )}$). So in that context, the index $\#0$ actually points to the ${\color{Fuchsia}( \; )}$ binder and not ${\color{OliveGreen}T_1}$ as it should be (that's why we marked it {\color{red}red}, because it actually refers to something else than what we wanted). The issue becomes completely clear after performing the first substitution - both variables inside are now $\#0$ so they necessarily refer to the same thing, even though initially they were not meant to.
+We would expect to get $({\color{blue}\#1} \; {\color{OliveGreen}\#0})$ as the result, but instead we get $({\color{blue}\#1} \; {\color{blue}\#1})$. We can see that something is wrong in the second line already. The ${\color{OliveGreen}\#0}$ that will be substituted, is kept as-is, as index 0. But that variable went inside the scope of the ${\color{Fuchsia}\bullet}$ binder (represented in the substitution operation as the parentheses ${\color{Fuchsia}( \; )}$). So in that context, the index $\#0$ actually points to the ${\color{Fuchsia}( \; )}$ binder and not ${\color{OliveGreen}T_1}$ as it should have (that's why we marked it {\color{red}red}, because it actually refers to something else than what we wanted). The issue becomes completely clear after performing the first substitution - both variables inside are now $\#0$ so they necessarily refer to the same thing, even though initially they were not meant to.
 
-The issue is that, when performing substitutions one-by-one (and many libraries allow to only do it this way), the substituted expression $e_2$ goes inside the scope of the other binder corresponding to $e_1$, so references in $e_2$ can be mistakenly captured to refer to $e_1$.
+The issue is that, when performing substitutions one-by-one, the substituted expression $e_2$ goes inside the scope of the other binder corresponding to $e_1$, so references in $e_2$ can be mistakenly captured to refer to $e_1$.
 
-To deal with this, we need to make sure that the indices inside of $e_2$ are updated correctly, so that the binder corresponding to $e_1$ is out of its scope. That is exactly what the \texttt{shift} function is for. \texttt{shift} simply increases all indices in a term by one, allowing us to go inside a scope of a binder, but without binding to it (so that all variables still reference the same things).
+To deal with this, we need to make sure that the indices inside of $e_2$ are updated correctly, so that the binder corresponding to $e_1$ is out of its scope. That is exactly what the \texttt{shift} function is for. \texttt{shift} simply increases all indices in a term by one, allowing us to go inside a scope of a binder, but without binding to it (so that all variables still reference the same things from the outside).
 
-The updated reduction rule will be $\texttt{unpack} (e_1, e_2) \texttt{ as } (\bullet, \bullet) \texttt{ in } t \longrightarrow ((t)[\texttt{shift }e_2/])[e_1/]$ where $\texttt{shift }e_2$ ensures that all variables in $e_2$ still point to the same things, even though we moved $e_2$ into another binder.
+The updated reduction rule will be $\texttt{unpack } (e_1, e_2) \texttt{ as } (\bullet, \bullet) \texttt{ in } t \longrightarrow ((t)[\texttt{shift }e_2/])[e_1/]$ where $\texttt{shift }e_2$ ensures that all variables in $e_2$ still point to the same things, even though we moved $e_2$ inside a temporary.
 
 We can revisit our example:
-
 \begin{align*}
-{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash \texttt{unpack} ({\color{blue}\#1}, {\color{OliveGreen}\#0}) \texttt{ as } ({\color{Fuchsia}\bullet}, {\color{BurntOrange}\bullet}) \texttt{ in } ({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0}) \\
-{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}(}{\color{BurntOrange}({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0})}[{\color{red}\texttt{shift }\#0}/]{\color{Fuchsia})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash \texttt{unpack } ({\color{blue}\#1}, {\color{OliveGreen}\#0}) \texttt{ as } ({\color{Fuchsia}\bullet}, {\color{BurntOrange}\bullet}) \texttt{ in } ({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0}) \\
+{\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}(}{\color{BurntOrange}({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0})}[{(\texttt{shift }\#0)}/]{\color{Fuchsia})}[{\color{blue}\#1}/] \\
 {\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}(}{\color{BurntOrange}({\color{Fuchsia}\#1} \; {\color{BurntOrange}\#0})}[{\color{OliveGreen}\#1}/]{\color{Fuchsia})}[{\color{blue}\#1}/] \\
 {\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}(}{\color{Fuchsia}\#0} \; {\color{OliveGreen}\#1}{\color{Fuchsia})}[{\color{blue}\#1}/] \\
 {\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash ({\color{blue}\#1} \; {\color{OliveGreen}\#0})
 \end{align*}
 
-To sum up, when doing multiple substitutions one-by-one, we need to keep in mind that terms that have been substituted first are inside the scope of all further substitutions and can capture variables for them (and get their indices mixed-up completely!). To avoid this we need to make sure to \texttt{shift} the terms as necessarily to preserve consistency of the references. When substituting more than 2 binders at once, we may even need to \texttt{shift} some terms multiple times.
+To sum up, when doing multiple substitutions one-by-one, we need to keep in mind that terms that have been substituted first are inside the scope of all further substitutions and can capture variables from them (and get their indices mixed-up completely!). To avoid this problem we need to \texttt{shift} the terms to preserve consistency of the references. When substituting more than 2 binders at once, we may even need to \texttt{shift} some terms multiple times.
 
 \subsection{Variable binding libraries}
 \label{binderlibs}
 
-As handling variable binding is a quite complex but very common problem for all programming language formalizations, there are some libraries that help dealing with it. Below we describe three libraries that we approached and our experiences using them.
+As handling variable binding is a common problem for all programming language formalizations, there are some libraries that help dealing with it. Below we describe three libraries that we approached and our experiences using them.
 
 \paragraph{}
 
 \textit{autosubst} \cite{autosubst} is quite simple to use. We use special types when defining the syntactic forms: a separate type \verb|var| for the De Bruijn index which is an alias for \verb|nat| but it is tagged so that the library knows this is an index and handles it properly; and a type constructor \verb|bind| that wraps any type, indicating that anything inside it consumes one binder. All properties are derived automatically. A big advantage of this library is that its simplification tactics are quite powerful, at least in our experience they worked out of the box most of the time. It is a very user-friendly and robust solution for simple calculi.
 
-Unfortunately, \textit{autosubst} was too simple for our use-case. In theory it supports having two types of syntax forms, but we had issues with using it. It also only allows binding one variable per syntactic form whereas we need to bind at least two (for \verb|MatchApp|). It may be possible to work around this issue by introducing some dummy syntactic forms.
+Unfortunately, \textit{autosubst} was too simple for our use-case. In theory it supports having two types of syntax forms, but we had issues with using it. It also only allows binding one variable per syntactic form whereas we need to bind at least two (for \verb|MatchApp|). It may be possible to work around this issue by introducing some dummy syntactic forms (but before we thought about this possible trick we already switched to the more flexible \textit{DbLib}).
 
 % It could be possible to work around this issue by introducing an intermediate syntactic form so that \verb|MatchApp| is divided into two forms, ie \verb|MatchApp e T1 T2 es ef| could become \verb|MatchApp1 e T1 T2 (MatchApp2 es) ef| (because \verb|es| is the term that needs to bind two variables). We didn't test if this would work, because before coming up with it we tried a different library, but it would be a rather 'hacky' approach.
 
 \paragraph{}
 
-We chose to use \textit{DbLib} \cite{dblib}. It is a bit harder to start with but is much more flexible. Instead of auto-generating how the binders behave (like \textit{autosubst} did), the user defines the syntactic forms and a \verb|traverse| function which describes how the binders behave (the \verb|traverse| function is described in section \ref{traverse}). This allows for having multiple bindings. The library also supports having multiple syntactic forms, although when using that feature it may be necessary to manually call the tactics that automate derivation of basic properties. For more complex syntactic structures, these tactics failed, so we had to keep the structure quite simple. The tactics for simplifying substitution were a bit less robust than in \textit{autosubst} and sometimes needed some help from the user, but it seems reasonable given that this library allows for more complicated syntax definitions.
+We chose to use \textit{DbLib} \cite{dblib}. It is a bit harder to start with but is much more flexible. Instead of auto-generating how the binders behave (like \textit{autosubst} did), the user defines the syntactic forms and a \verb|traverse| function which describes how the binders behave (the \verb|traverse| function is described in section \ref{traverse}). This allows for having multiple bindings. The library also supports multiple syntactic categories, although when using that feature it may be necessary to manually call the tactics that automate derivation of basic properties. For more complex syntactic structures, these tactics failed, so we had to keep the structure quite simple. The tactics for simplifying substitution were a bit less robust than in \textit{autosubst} and sometimes needed some help from the user, but it seems reasonable given that this library allows for more complicated syntax definitions.
 
 \paragraph{}
 
@@ -467,14 +536,19 @@ It seems to be the most flexible approach but also the most complex one, as the 
 
 \paragraph{}
 
-In this project, the choice of the library was quite highly influenced by my level of understanding. I started with \textit{autosubst} which was the simplest one and quite easy to learn, but than it seemed that it imposed some constraints that didn't allow to express important parts of the calculus (although it may have been possible to work around them with some clever and ugly tricks). Than I tried both \textit{Locally Nameless} and \textit{DbLib}, but at that point \textit{Locally Nameless} was still too hard to understand it to be able to use it. \textit{DbLib} was a nice middle-ground between flexibility and complexity and it still offered decent automation. After using it and understanding better more nuances of using De Bruijn indices, I can appreciate the beauty of \textit{Locally Nameless} approach, but given its limited amount of automation, it is a library best used for more complex calculi.
+In this project, the choice of the library was quite highly influenced by my level of understanding. I started with \textit{autosubst} which was the simplest one and quite easy to learn, but then it seemed that it imposed some constraints that didn't allow to express important parts of the calculus (although it may have been possible to work around them with some clever but ugly tricks). Then I tried both \textit{Locally Nameless} and \textit{DbLib}, but at that point \textit{Locally Nameless} was still too hard to understand it to be able to use it. \textit{DbLib} was a nice middle-ground between flexibility and complexity and it still offered decent automation. After using it and understanding better more nuances of using De Bruijn indices, I can appreciate the beauty of \textit{Locally Nameless} approach, but given its limited amount of automation, it is a library best used for more complex calculi.
 
 \subsection{Testing before proving}
-Adding the pattern matching was a very delicate matter, especially as we had to diverge slightly from the original calculus. It was easy to make mistakes in the definitions of types and syntax (for example one of the bugs was having the two variables bound by app in different order in the typing judgement and in the semantics). Such mistakes lead to unprovable theorems, but they may not be easy to notice during proving. To avoid such issues, I decided to write some `unit tests' - I defined simple programs in the calculus that I know should work and tried proving that they do typecheck and evaluate correctly. These proofs were usually rather easy but they helped find lots of simple mistakes. Moreover, they can serve as examples of how to use the calculus in the formalized version which helps understanding.
+Adding the pattern matching was a very delicate matter, especially as we had to diverge slightly from the original calculus (by defining the separate syntactic categories for all pattern types). It was easy to make mistakes in the definitions of types and syntax (for example one of the bugs was having the two variables bound by app in different order in the typing judgement and in the semantics). Such mistakes lead to unprovable theorems, but they may not be easy to notice early during proving. To avoid such issues, I decided to write some \emph{unit tests} - I defined simple programs in the calculus that I know should work and tried proving that they do type-check and evaluate correctly. These proofs were usually rather easy but they helped find lots of simple mistakes. Moreover, they can serve as examples of how to use the calculus in the formalized version which helps understanding.
 
 It seems like a very good approach to write some simple tests (for example lemmas about the desired properties of some specific simple terms, like the ones at the end of section \ref{finalformencoding}) before moving on to the general soundness proofs.
 
+\todo[inline]{iterative}
+% We have approached the proofs by first trying to prove a subset of the calculus corresponding to STLC, as a warm-up. Then we have added quotes, splices and lift and updated the proofs. Later we added the pattern matching and at the very end the fixpoint operator. Adding the features step-by-step required rewriting a substantial part of the proofs and sometimes even reformulating some basic definitions. But it also helped to keep the scope more manageable by dividing the proving effort into smaller pieces. The progressive approach also helped me improve my mechanization skills gradually (so in the last proof I was able to use techniques that I wouldn't understand without enough mechanization at the beginning) and better understand the paper proofs that I've been basing on.
 
+\todo[inline]{generalizing}
+%\subsection{Generalizing quantifiers}
+%It is also important that we split the universal quantification in two parts. The lemma where all of the variables are defined in the first \verb|forall| clause would be equivalent. However when using the default induction principle, we would get too weak inductive hypotheses (because the \verb|x| etc. would be fixed instead of being universally quantified).
 
 \subsection{Proof stability, naming}
 
@@ -482,26 +556,26 @@ Another good practice that I learnt along the way is trying to make the proofs r
 
 Firstly, it's good to use as much automation as possible, as it is usually robust to small changes. When introducing hypotheses (with \verb|intro| or \verb|assert|) it is good to give them names, because the automatic naming may very easily change if an additional assumption is added in the future.
 
-In big case-by-case proofs (for example syntactic induction), I usually try to come up with some basic strategy that solves at least the simple goals (using \verb|induction X; try solve [general strategy].|), but in more complex proofs we may still have to manually approach many goals. It is then a good idea when focusing a new goal to write a comment shortly describing the current goal. This helps when by adding some additional rules, the order of the goal changes which may result in applying tactics to wrong goals and very confusing errors. These comments help to quickly catch situations when the current goal is different than would be expected.
+In big case-by-case proofs (for example syntactic induction), I usually try to come up with some basic strategy that solves at least the simple goals (using \verb|induction X; try solve [general strategy].|), but in more complex proofs we may still have to manually approach many goals. It is then a good idea when focusing a new goal to write a comment shortly describing the current goal. This helps when by adding some additional rules, the order of the goal changes (result in applying tactics to wrong goals and very confusing errors). These comments help to quickly catch situations when the current goal is different than would be expected.
 
-I didn't find a way to name hypotheses introduced by calling the \verb|inversion| tactics (which I use extensively), so I still had to deal with the tactics having unpredictable names. It is also problematic when combining tactics. For example in the chain \verb|induction t; inversion H1.|, \verb|H1| may introduce different sets of hypotheses for each case. Sometimes I also want to call \verb|inversion| but the particular hypothesis that I want to examine will be called differently in different branches of a tactic chain similar to the one just mentioned. The solution to these issues is matching the goal - the ability to write tactics that match the current goal or available hypotheses against some patterns. For example we can write:
+I didn't find a way to name hypotheses introduced by calling the \verb|inversion| tactics (which I use extensively), so I still had to deal with unpredictable hypothesis names. It is also problematic when combining tactics. For example in the chain \verb|induction t; inversion H1.|, \verb|H1| may introduce different sets of hypotheses for each case. Sometimes I also want to call \verb|inversion| but the particular hypothesis that I want to examine will be called differently in different branches of a tactic chain similar to the one just mentioned. The solution to these issues is matching the goal - the ability to write tactics that match the current goal or available hypotheses against some patterns. For example we can write:
 \begin{lstlisting}[mathescape=true]
 Ltac invV :=
   match goal with
   | H: ?G $\vdash$(L0) ?v $\in$ $\square$(?T) |- _ => inversion H; subst
   end.
 \end{lstlisting}
-which defines a tactic that finds a hypothesis containing a typing judgement for some quoted type (a $\square T$ for some $T$) and runs \verb|inversion| on this hypothesis. Now we can write \verb|induction t; invV.| and regardless of what that hypothesis would be called, we can find it and inside of \verb|invV| bind its name to \verb|H|. This is a very powerful technique that allows to write very useful tactics.
+which defines a tactic that finds a hypothesis containing a typing judgement for some quoted type (a $\square T$ for some $T$) and runs \verb|inversion| on this hypothesis. Now we can write \verb|induction t; invV.| and regardless of what that hypothesis would be called, we can find it and inside of \verb|invV| bind its name to \verb|H|. This is a very powerful technique that allows to write proofs robust to changes.
 
 
 \section{Summary}
 \label{sec:summary}
 
-We have described the $\lambda^{\RIGHTcircle}$ calculus and various challenges concerning formalizing it in Coq and proving its soundness. We discuss some of the available libraries useful in formalizing calculi and some other good practices for proving in Coq. Our main contribution is the mechanized formalization of the calculus along with its soundess proofs that can be found at \href{https://github.com/radeusgd/QuotedPatternMatchingProof/}{https://github.com/radeusgd/QuotedPatternMatchingProof/}.
+We have described the \calculus calculus and various challenges in formalizing it in Coq and proving its soundness. We discuss some interesting problems that had to be solved along the way. Our main contribution is the mechanized formalization of the calculus along with its soundness proofs that can be found at \href{https://github.com/radeusgd/QuotedPatternMatchingProof/}{https://github.com/radeusgd/QuotedPatternMatchingProof/}.
 
 \bibliographystyle{unsrt}
 \bibliography{bibliography}
-
+\todo[inline]{Fix the QPM citation}
 
 \section*{Appendix}
 
@@ -509,9 +583,7 @@ We have described the $\lambda^{\RIGHTcircle}$ calculus and various challenges c
 
 To simplify the proofs, we remove nested patterns leaving only simpler non-nested pattern matching. This requires changing some typing and semantic rules.
 
-As we use De Bruijn indices, the definitions in the mechanization look slightly different. For readability we present them in similar style to the original, so we introduce fake names for variables bound in the pattern matches that correspond to the De Bruijn indices. $b_0$ stands for the introduced variable name that corresponds to the most closely bound De Bruijn index and $b_1$ stands for the next index.
-
-For clarity, we show how the syntax of our patterns corresponds to non-nested patterns in the original syntax in figure \ref{fig:pattern-syntax}.
+For clarity, we show how the syntax of our patterns corresponds to non-nested patterns in the original syntax in figure \ref{fig:pattern-syntax}. As we use De Bruijn indices, the definitions in the mechanization look slightly different. So we introduce fake names for variables bound in the pattern matches that correspond to the De Bruijn indices. $b_0$ stands for the introduced variable name that corresponds to the most closely bound De Bruijn index and $b_1$ stands for the next index.
 
 \newcommand{\syntaxeq}[2]{ #1 \quad &\equiv \quad #2 \\ }
 
@@ -768,8 +840,8 @@ Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc
 { \tpd{(\patmat{\tpd{(\quoted{n})}{\qtype{Nat}}}{\patnat{n}}{t_2}{t_3})}{T} \longrightarrow^0 t_2 }
 
 \infrule[E-PatNat-Fail]
-{ t \not= n \andalso t \text{ is plain} }
-{ \tpd{(\patmat{\tpd{(\quoted{t})}{\qtype{Nat}}}{\patnat{n}}{t_2}{t_3})}{T} \longrightarrow^0 t_3 }
+{ \hat\t \not= n }
+{ \tpd{(\patmat{\tpd{(\quoted{\hat\t})}{\qtype{Nat}}}{\patnat{n}}{t_2}{t_3})}{T} \longrightarrow^0 t_3 }
 
 \vspace{1mm}
 
@@ -778,25 +850,25 @@ Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc
 { \tpd{(\patmat{t}{\patref{x}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patref{x}}{t_2}{t_3})}{T} }
 
 \infax[E-PatVar-Succ]
-{ \tpd{(\texttt{MatchVar} \; \tpd{(\quoted{x})}{\qtype{T_1}} \; x \; t_2 \; t_3)}{T} \longrightarrow^0 t_2 }
+{ \tpd{(\patmat{\tpd{(\quoted{x})}{\qtype{T_1}}}{\patref{x}}{t_2}{t_3})}{T} \longrightarrow^0 t_2 }
 
 \infrule[E-PatVar-Fail]
-{ t \not= x \andalso t \text{ is plain} }
-{ \tpd{(\texttt{MatchVar} \; \tpd{(\quoted{x})}{\qtype{T_1}} \; x \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
+{ \hat\t \not= x }
+{ \tpd{(\patmat{\tpd{(\quoted{\hat\t})}{\qtype{T_1}}}{\patref{x}}{t_2}{t_3})}{T} \longrightarrow^0 t_3 }
 
 \vspace{1mm}
 
 \infrule[E-PatApp-Red]
 { t \longrightarrow^0 t'}
-{ \tpd{(\patmat{t}{\patapp{(\patbind{b_0}{t})}{(\patbind{b_1}{t \to T_2})}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patapp{(\patbind{b_0}{t})}{(\patbind{b_1}{t \to T_2})}}{t_2}{t_3})}{T} }
+{ \tpd{(\patmat{t}{\patapp{(\patbind{b_1}{T_1 \to T_2})}{(\patbind{b_0}{T_1})}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patapp{(\patbind{b_1}{T_1 \to T_2})}{(\patbind{b_0}{T_1})}}{t_2}{t_3})}{T} }
 
 \infrule[E-PatApp-Succ]
-{ t = (e_1 \; e_2) \andalso t \text{ is plain} }
-{ \tpd{(\texttt{MatchApp} \; \tpd{(\quoted{t})}{\qtype{T_3}} \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto \quoted{e_2}][b_1 \mapsto \quoted{e_1}] }
+{ \hat\t = (e_1 \; e_2) }
+{ \tpd{(\patmat{\tpd{(\quoted{\hat\t})}{\qtype{T_3}}}{\patapp{(\patbind{b_1}{T_1 \to T_2})}{(\patbind{b_0}{T_1})}}{t_2}{t_3})}{T} \longrightarrow^0 t_2[b_0 \mapsto \quoted{e_2}][b_1 \mapsto \quoted{e_1}] }
 
 \infrule[E-PatApp-Fail]
-{ t \text{ is not an application} \andalso t \text{ is plain} }
-{ \tpd{(\texttt{MatchApp} \; \tpd{(\quoted{t})}{\qtype{T_3}} \; T_1 \; T_2 \; b_0 \; b_1 \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
+{ \hat\t \not= (e_1 \; e_2) }
+{ \tpd{(\patmat{\tpd{(\quoted{\hat\t})}{\qtype{T_3}}}{\patapp{(\patbind{b_1}{T_1 \to T_2})}{(\patbind{b_0}{T_1})}}{t_2}{t_3})}{T} \longrightarrow^0 t_3 }
 
 
 \vspace{1mm}
@@ -806,35 +878,35 @@ Similarly, we need separate \textsc{E-Pat-Succ}, \textsc{E-Pat-Fail} and \textsc
 { \tpd{(\patmat{t}{\patunlift{b_0}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patunlift{b_0}}{t_2}{t_3})}{T} }
 
 \infax[E-PatUnlift-Succ]
-{ \tpd{(\texttt{MatchUnlift} \; \tpd{(\quoted{n})}{\qtype{Nat}} \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto n] }
+{ \tpd{(\patmat{\tpd{(\quoted{n})}{\qtype{Nat}}}{\patunlift{b_0}}{t_2}{t_3})}{T} \longrightarrow^0 t_2[b_0 \mapsto n] }
 
 \infrule[E-PatUnlift-Fail]
-{ t \text{ is not a number} \andalso t \text{ is plain} }
-{ \tpd{(\texttt{MatchUnlift} \; \tpd{(\quoted{t})}{\qtype{T_1}} \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
+{ \hat\t \not= n }
+{ \tpd{(\patmat{\tpd{(\quoted{\hat\t})}{\qtype{T_1}}}{\patunlift{b_0}}{t_2}{t_3})}{T} \longrightarrow^0 t_3 }
 
 \vspace{1mm}
 
 \infrule[E-PatLam-Red]
 { t \longrightarrow^0 t'}
-{ \tpd{(\patmat{t}{\patlam{b_0}{t \to T_2}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patlam{b_0}{t \to T_2}}{t_2}{t_3})}{T} }
+{ \tpd{(\patmat{t}{\patlam{b_0}{T_1 \to T_2}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patlam{b_0}{T_1 \to T_2}}{t_2}{t_3})}{T} }
 
 \infrule[E-PatLam-Succ]
-{ t = \lam{x}{T_1}{e} \andalso t \text{ is plain} \andalso x' \text{ is fresh} }
-{ \tpd{(\texttt{MatchLam} \; \tpd{(\quoted{t})}{\qtype{(T_1 \to T_2)}} \; (T_1 \to T_2) \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto \lam{x'}{\qtype{T_1}}{\quoted{e[x \mapsto \splice{x'}]}}] }
+{ \hat\t = \lam{x}{T_1}{e} \andalso x' \text{ is fresh} }
+{ \tpd{(\patmat{\tpd{(\quoted{\hat\t})}{\qtype{(T_1 \to T_2)}}}{\patlam{b_0}{T_1 \to T_2}}{t_2}{t_3})}{T} \longrightarrow^0 t_2[b_0 \mapsto \lam{x'}{\qtype{T_1}}{\quoted{e[x \mapsto \splice{x'}]}}] }
 
 \infrule[E-PatLam-Fail]
-{ t \text{ is not a lambda expression} \andalso t \text{ is plain} }
-{ \tpd{(\texttt{MatchLam} \; \tpd{(\quoted{t})}{\qtype{T_1 \to T_2}} \; T_1 \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_3 }
+{ \hat\t \not= \lam{x}{T_1}{e} }
+{ \tpd{(\patmat{\tpd{(\quoted{\hat\t})}{\qtype{T_1 \to T_2}}}{\patlam{b_0}{T_1 \to T_2}}{t_2}{t_3})}{T} \longrightarrow^0 t_3 }
 
 \vspace{1mm}
 
 \infrule[E-PatFix-Red]
 { t \longrightarrow^0 t'}
-{ \tpd{(\texttt{MatchFix} \; t \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 \tpd{(\texttt{MatchFix} \; t' \; b_0 \; t_2 \; t_3)}{T} }
+{ \tpd{(\patmat{t}{\patfix{(\patbind{b_0}{T_1 \to T_1})}}{t_2}{t_3})}{T} \longrightarrow^0 \tpd{(\patmat{t'}{\patfix{(\patbind{b_0}{T_1 \to T_1})}}{t_2}{t_3})}{T} }
 
 \infrule[E-PatFix-Succ]
-{ \hat\t = \fix{e} \andalso t \text{ is plain} }
-{ \tpd{(\texttt{MatchFix} \; \tpd{(\quoted{\hat\t})}{\qtype{T_1}} \; b_0 \; t_2 \; t_3)}{T} \longrightarrow^0 t_2[b_0 \mapsto \quoted{e}] }
+{ \hat\t = \fix{e} }
+{ \tpd{(\patmat{(\tpd{\quoted{\hat\t}}{\qtype{T_1}})}{\patfix{(\patbind{b_0}{T_1 \to T_1})}}{t_2}{t_3})}{T} \longrightarrow^0 t_2[b_0 \mapsto \quoted{e}] }
 
 \infrule[E-PatFix-Fail]
 { \hat\t \not= \fix{t'} }
