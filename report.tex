@@ -538,9 +538,9 @@ forall (P : Typed -> Prop) (P0 : Untyped -> Prop),
 
 This is much better. The typed terms are now destructed and we have to prove cases for each of the two syntactic forms. Moreover, for \textit{branch} which contains typed terms as elements, we have the inductive hypothesis that the property holds for both of its elements.
 
-This induction principle is already good enough, because it gives us all the necessary assumptions. In this principle, we have to properties that we prove and an assumption that relates them. The downside is that when using this induction principle, we usually have a goal with one property and the other one has to be defined every time. In the setting of the dual typed and untyped terms, we can do better.
+This induction principle is already good enough, because it gives us all the necessary assumptions. In this principle, we have two properties that we prove and an assumption that relates them. The downside is that when using this induction principle, we usually have a goal with one property and the other one has to be defined every time. In the setting of typed and untyped terms, we can do better.
 
-We can define \texttt{P0} such that \texttt{P0 u -> forall T : Type, P (typed u T)}. We then get:
+We can choose \texttt{P0} such that \texttt{P0 u -> forall T : Type, P (typed u T)}. We then get:
 
 \begin{lstlisting}
 Lemma Typed_syntactic :
