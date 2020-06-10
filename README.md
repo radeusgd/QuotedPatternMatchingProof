@@ -6,9 +6,9 @@ Its goal was to create a mechanized proof of soundness of calculus defined in *A
 
 ## Artifacts
 
-The mechanization in the Coq proof assistant can be found in the [`calculus`](calculus/) directory.
+The mechanization in the Coq proof assistant can be found in the [`calculus/`](calculus/) directory.
 
 It uses Coq version 8.9.1 and [DbLib](https://github.com/coq-community/dblib/) library.
 
-The report of the semester project is available at [report.pdf](report.pdf).
+The report of the semester project is available at [`report.pdf`](report.pdf).
 The [`examples/`](examples/) directory contains some examples from the report.
