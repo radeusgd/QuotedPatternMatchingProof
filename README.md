@@ -1,4 +1,4 @@
-# A Mechanized Theory of Quoted Patterns
+# A Mechanized Theory of Quoted Code Patterns
 
 This is a semester project done in the Spring semester of 2020/2021 in the LAMP laboratory at the EPFL under supervision of Fengyun Liu and Nicolas Stucki.
 
