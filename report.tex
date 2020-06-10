@@ -139,7 +139,7 @@
 %formal
 \begin{abstract}
   %%% https://plg.uwaterloo.capaper/~migod/research/beckOOPSLA.html
-The pattern matching on code from the new macro system of Scala 3 is modelled by a calculus called \calculus. We present a mechanized proof of soundness of the calculus in Coq .
+The pattern matching on code from the new macro system of Scala 3 is modelled by a calculus called \calculus. We present a mechanized proof of soundness of the calculus in Coq and discuss encountered challenges.
 %
 %\keywords{Attendance System  \and Parameter tampering \and Exploit discovery.}
 \end{abstract}
@@ -307,8 +307,8 @@ with term :=
 \end{verbatim}
 
 One other modification that we have to apply here is to the variable matching pattern. This pattern checks if the boxed code is a reference to some variable, so after the De Bruijn translation, this pattern also contains a De Bruijn index for the variable that is matched (see \texttt{PVar} in the first listing). This occurrence is unusual, because we need to update it when shifting all indices in a term, so that it always refers to the original variable (why we have to shift is explained in the previous section). It has to be treated differently, because it should never be substituted with some concrete value.
-\todo[inline]{Maybe it's easier to see the type checking problem if you list the type signature of "traverse" and "f", as well as the case for "PVar" or "MatchVar" in traverse.}
-However in the library that we use, the \texttt{traverse} function is defined in such a way that during traversal we replace each variable with the result of calling \texttt{f l x} which handles all renaming and returns a new instance of the variable using the constructor from the \texttt{Var} typeclass. It is possible to overcome this by unpacking the result, checking if it indeed is an instance of \texttt{VAR} and getting the index from it, but this approach breaks the properties that the library requires of \texttt{traverse}.
+
+However in the library that we use, the \texttt{traverse} function has type \texttt{(nat $\to$ nat $\to$ term) $\to$ (nat $\to$ T $\to$ T)} (where \texttt{T} is either a \texttt{term} or \texttt{typedterm}). \texttt{traverse f l t} traverses the term \texttt{t}, incrementing \texttt{l} when entering binders and replacing a variable with index \texttt{x} with the result of \texttt{f l x}. As seen in the type signature, result of \texttt{f l x} can be any \texttt{term}. Because of that, we cannot at this point prove that the result of shifting a variable inside a pattern will remain a variable.
 
 Instead, we replace the raw De Bruijn index in \texttt{MatchVar} with an arbitrary term. This satisfies all the constraints required by the library and ensures that this index is updated when necessary. Unfortunately this also allows for terms that are ill-formed syntactically, (variable match over something other than a variable). This issue is however addressed in the typing rules --- only instances of \texttt{MatchVar} in which \texttt{x} has the form \texttt{VAR y} are accepted. Thus, when we prove Preservation, we also prove that this variable is never substituted for (as the term resulting from such substitution would be ill-typed).
 
@@ -334,6 +334,8 @@ Qed.
 
 Another important change from the paper version is the typing environment. On paper it is defined as a (partial) mapping from variable names to types and levels.
 \textit{DbLib} is also providing support for using environments with De Bruijn indices. We used the approach suggested by the library authors --- our environment is represented by a partial mapping from natural numbers to types. It is defined as a list of options. This integrates very well with operations on De Bruijn indices. For example, when the environment is extended while going inside a binder, the new type is just prepended to the list. This both handles the new type and the fact that other indices are shifted.
+
+Our definitions always extend the environment without leaving holes, so we could have used lists instead lists of options. But we choose the latter, because the \textit{DbLib} library provides some helpful tactics for handling environments defined that way. This also simplifies the definition of the \textit{Weakening} and \textit{Substitution} lemmas, as we can use an operation that inserts a variable to an environment with an arbitrary index, possibly leaving holes.
 
 As our typing environment has to keep track of level of each variable, the final \texttt{TypEnv} type is \texttt{list (option (level * type))}. The judgement from the original paper $\Gamma(x^i) = T$ is expressed as \texttt{lookup $x$ $\Gamma$ = Some (L$i$, $T$)}.
 
@@ -378,26 +380,7 @@ Theorem Preservation : forall t1 T G L,
 
 \subsection{Induction}
 
-\todo[inline]{This section is difficult to understand and the readers are easy to get lost. Try to make it more understandable by showing the relevant Coq code if it's clean or by presenting the insight/tricks using simple examples.
-
-Abstract insights/tricks and present them using simple examples without specifics of the project is a very good practice in writing.
-
-Otherwise, interested readers will just check Coq source code to understand more.
-}
-As many proofs in programming language theory rely on induction on the structure of the term or the typing judgement, we needed appropriate induction principles.
-
-One of the first challenges was that our definitions of terms and typedterms are mutually inductive. The default induction principles generated by Coq don't take this into account, so induction principles generated for them are too weak (the automatically generated principle doesn't have all the assumptions that are needed for it to be useful).
-
-First we used Coq's \verb|Scheme| directive that allows to define induction principles that are mutually inductive, this already gives us an induction principle that has all the necessary assumptions. However, the induction principles require two properties that we will be proving - one for the typedterm and another variant for un-typed terms (which is of course expected, because in general we can't derive one from the other for arbitrary mutually inductive definitions). This is however not too convenient, because when using induction we have just one property we want to prove (usually for typedterms) and coming up with this dual version for un-typed terms for every instance of syntactic induction would be very cumbersome.
-
-So to help with that, we define our own induction principle that combines the two in such a way, that it requires only a property we want to prove for typedterms and extends it to terms by ascribing to them an arbitrary type. We can prove its correctness using the principle automatically generated earlier.
-
-Ascribing the terms with arbitrary types, which essentially means requiring it to hold for all types may sound like a too strong requirement. However in practice, all properties that we prove using this principle contain an assumption that the term is well-typed. Thus if the ascribed type is incorrect, the whole property holds trivially as it follows a false assumption. This is usually solved by the \verb|inversion| tactic on that typing assumption. Moreover we have proven the following lemma:
-\begin{lstlisting}[mathescape=true]
-Lemma AscribedTypeIsCorrect : forall G L t T T',
-  G $\vdash$(L) (t : T) $\in$  T' -> T = T'.
-\end{lstlisting}
-which ensures that the type ascribed has to match the type resulting from the typing derivation.
+As we have two mutually inductive syntactic categories (the untyped terms and typed terms that wrap the untyped ones), we need an induction principle that handles them well. The default principle generated by Coq is not convenient to use as it requires separate properties for typed terms and untyped terms. However in proofs, we usually want to only prove the property on typed terms. We created a custom induction principle that only requires a property on typed terms, because the analogous property on untyped terms is inferred. The idea is further discussed in section \ref{sec:induction}.
 
 \subsection{Progress}
 
@@ -473,7 +456,11 @@ We extensively use the tactics provided by \textit{DbLib} for dealing with subst
 
 Patterns that represent multiple binders and are substituted at once have to be considered very carefully as it is non-trivial to judge which indices to shift and how.
 
-First, let's see more closely how beta-reduction works with De Bruijn indices. For clarity, to show the intermediate step, we define the substitution operation $(e_1)[e_2/]$ that substitutes all De Bruijn indices equal to 0 in $e_1$ with $e_2$ and decreases other indices (to indicate that after substitution we have got rid of one binder). As the substitution operation is an intermediate step, the enclosing lambda is removed already, but the indices are not yet shifted, so to keep the De Bruijn indices consistent, we treat the parentheses as a binder, so that the expression inside is most closely bound to what will be substituted. With these definitions, beta-reduction will proceed as follows:
+First, let's see more closely how beta-reduction works with De Bruijn indices.
+
+To show how the indices behave, we assume there are some free variables that are not reduced (these are put on the left side of $\vdash$ indicating the environment). In our language this happens because we have variables at two levels, and while level 0 variables are reduced, level 1 are not.
+
+For clarity, to show the intermediate step, we define the substitution operation $(e_1)[e_2/]$ that substitutes all De Bruijn indices equal to 0 in $e_1$ with $e_2$ and decreases other indices (to indicate that after substitution we have got rid of one binder). As the substitution operation is an intermediate step, the enclosing lambda is removed already, but the indices are not yet shifted, so to keep the De Bruijn indices consistent, we treat the parentheses around $(e_1)$ as a binder. In $(e_1)[e_2]$, $e_1$ is still inside a binder that will replace its first free variable with $e_2$. With these definitions, beta-reduction will proceed as follows:
 \begin{align*}
 {\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash ({\color{Fuchsia}\lambda}. \; {\color{Fuchsia}\#0} \; {\color{OliveGreen}\#1}) \; {\color{blue}\#1} \\
 {\color{blue}T_2}; {\color{OliveGreen}T_1} &\vdash {\color{Fuchsia}({\color{Fuchsia}\#0} \; {\color{OliveGreen}\#1})}[{\color{blue}\#1}/] \\
@@ -511,6 +498,60 @@ We can revisit our example:
 
 To sum up, when doing multiple substitutions one-by-one, we need to keep in mind that terms that have been substituted first are inside the scope of all further substitutions and can capture variables from them (and get their indices mixed-up completely!). To avoid this problem we need to \texttt{shift} the terms to preserve consistency of the references. When substituting more than 2 binders at once, we may even need to \texttt{shift} some terms multiple times.
 
+\subsection{Induction principle for related types}
+In our language we have typed and untyped terms that are mutually inductive. We often want to prove some properties about them using syntactic induction. However the induction principles generated by default may not always be sufficient.
+
+To illustrate the concept we will use a simplified definition:
+\begin{lstlisting}
+Inductive Typed :=
+| typed (u: Untyped) (T: Type)
+with
+Untyped :=
+| leaf
+| branch (t1 t2 : Typed).
+\end{lstlisting}
+
+The default induction principle generated by Coq for \texttt{Typed} is:
+\begin{lstlisting}
+forall P : Typed -> Prop,
+  (forall (u : Untyped) (T : Type), P (typed u T)) -> 
+  forall t : Typed, P t
+\end{lstlisting}
+
+When proving a theorem about typed terms, we need to show that some property holds for all untyped terms, but we don't get any inductive hypotheses about them in this induction principle. For most theorems such principle is too weak.
+
+To improve on that, we can use Coq's \texttt{Scheme} to generate mutually inductive principles.
+
+\begin{lstlisting}
+Scheme Typed_mutualind := Induction for Typed Sort Prop
+  with Untyped_mutualind := Induction for Untyped Sort Prop.
+\end{lstlisting}
+
+This gives us the following principle for typed terms:
+\begin{lstlisting}
+forall (P : Typed -> Prop) (P0 : Untyped -> Prop),
+  (forall u : Untyped, P0 u -> forall T : Type, P (typed u T)) ->
+  P0 leaf ->
+  (forall t1 : Typed, P t1 -> forall t2 : Typed, P t2 -> P0 (branch t1 t2)) ->
+  forall t : Typed, P t
+\end{lstlisting}
+
+This is much better. The typed terms are now destructed and we have to prove cases for each of the two syntactic forms. Moreover, for \textit{branch} which contains typed terms as elements, we have the inductive hypothesis that the property holds for both of its elements.
+
+This induction principle is already good enough, because it gives us all the necessary assumptions. In this principle, we have to properties that we prove and an assumption that relates them. The downside is that when using this induction principle, we usually have a goal with one property and the other one has to be defined every time. In the setting of the dual typed and untyped terms, we can do better.
+
+We can define \texttt{P0} such that \texttt{P0 u -> forall T : Type, P (typed u T)}. We then get:
+
+\begin{lstlisting}
+Lemma Typed_syntactic :
+  forall (P : Typed -> Prop),
+    (forall T, P (typed leaf T)) ->
+    (forall (t1 t2 : Typed) T, P t1 ->  P t2 -> P (typed (branch t1 t2) T)) ->
+    forall t : Typed, P t.
+\end{lstlisting}
+
+We wrap all of the untyped variants into typed variants with an arbitrary type. This allows us to reuse the property defined for typed terms. This is very convenient, as now we can just do \texttt{induction term using Typed\_syntactic} and we will get goals for all the untyped cases.
+
 \subsection{Variable binding libraries}
 \label{binderlibs}
 
@@ -543,12 +584,8 @@ Adding the pattern matching was a very delicate matter, especially as we had to 
 
 It seems like a very good approach to write some simple tests (for example lemmas about the desired properties of some specific simple terms, like the ones at the end of section \ref{finalformencoding}) before moving on to the general soundness proofs.
 
-\todo[inline]{iterative}
-% We have approached the proofs by first trying to prove a subset of the calculus corresponding to STLC, as a warm-up. Then we have added quotes, splices and lift and updated the proofs. Later we added the pattern matching and at the very end the fixpoint operator. Adding the features step-by-step required rewriting a substantial part of the proofs and sometimes even reformulating some basic definitions. But it also helped to keep the scope more manageable by dividing the proving effort into smaller pieces. The progressive approach also helped me improve my mechanization skills gradually (so in the last proof I was able to use techniques that I wouldn't understand without enough mechanization at the beginning) and better understand the paper proofs that I've been basing on.
-
-\todo[inline]{generalizing}
-%\subsection{Generalizing quantifiers}
-%It is also important that we split the universal quantification in two parts. The lemma where all of the variables are defined in the first \verb|forall| clause would be equivalent. However when using the default induction principle, we would get too weak inductive hypotheses (because the \verb|x| etc. would be fixed instead of being universally quantified).
+\subsection{Iterative development}
+We have approached the proofs by first trying to prove a subset of the calculus corresponding to the \textit{simply typed lambda calculus}, as a warm-up. Then we have been adding more features one by one and updating the proofs. While such approach sometimes requires rewriting substantial parts of the proofs, it allows to keep the scope more manageable. Moreover, it allows for partial results along the way, so it is a kind of a safety net. Even if some later stage were to turn out too problematic to do, the iterative approach ensures that there are partial outcomes that may stand on their own.
 
 \subsection{Proof stability, naming}
 
@@ -575,7 +612,6 @@ We have described the \calculus calculus and various challenges in formalizing i
 
 \bibliographystyle{unsrt}
 \bibliography{bibliography}
-\todo[inline]{Fix the QPM citation}
 
 \section*{Appendix}
 
