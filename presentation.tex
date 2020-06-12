@@ -14,6 +14,8 @@
 \usepackage{multicol}     % multi-column
 \usepackage{bcprules}     % typeset inference rule
 
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
 
 \def\e{e}
 \def\t{t}
@@ -46,7 +48,7 @@
 
 \lstset{basicstyle=\ttfamily}
 
-\title{Mechanized proof for Quoted Pattern Matching in Scala 3}
+\title{A Mechanized Theory \\ of Quoted Code Patterns}
 \author{Radosław Waśko}
 \date{June 18, 2020}
 
@@ -87,10 +89,10 @@ def f(e: Expr[Int]): Expr[Int] =
     case _ => e
   }
 
-f(${add(0, 2)}) // evaluates to ${2}
+f(${add(0, 2)})
 \end{lstlisting}
 
-corresponds to
+which evaluates to $\$\{2\}$ corresponds to
 
 \begin{equation*}
 f = \lam{e}{\qtype{Nat}}{\patmat{e}{\big( \patapp{\patapp{add}{\patnat{0}}}{(\patbind{y}{Nat})} \big)}{y}{e}}
@@ -121,41 +123,64 @@ T & ::= & Nat \sep T{\to}T \sep \qtype{T} \\
 \end{array}
 \]
 
-\let\thefootnote\relax\footnotetext{Definitions from the QPM paper}
+\let\thefootnote\relax\footnotetext{Definitions from the paper \textit{A Theory of Quoted Code Patterns}}
 
 \end{frame}
 
-\begin{frame}{\calculus - selected typing rules}
-
-  \begin{framed}
-    
-    \begin{multicols}{2}
-      \infrule[T-Box]
-      { \Gamma \vdash^1 \t \in T }
-      { \Gamma \vdash^0 \tpd{(\quoted{\t})}{\qtype{T}} \;\in\; \qtype{T} }
-      
-    \vspace{1mm}
-    
-    \infrule[T-Unbox]
-    { \Gamma \vdash^0 \t \in \qtype{T} }
-    { \Gamma \vdash^1 \tpd{(\splice{\t})}{T} \;\in\; T  }
-    
-    \end{multicols}
-  
-%  \infrule[T-Pat]
-%  {
-%    \Gamma \vdash^0 \t_1 \in \qtype{T_1} \andalso
-%    \Gamma \vdash_p \p \in T_1 \leadsto \Gamma_p \andalso
-%    \Gamma;\Gamma_p \vdash^0 \t_2 \in T \andalso
-%    \Gamma \vdash^0 \t_3 \in T
-%  }
-%  { \Gamma \vdash^0 \tpd{(\patmat{\t_1}{\p}{\t_2}{\t_3})}{T} \;\in\; T  }
-
-  \end{framed}
+\begin{frame}{\calculus - quotes and splices}
+\begin{figure}
+%  \includegraphics[height=0.72\textheight]{Tbox}
+%  \includegraphics[height=0.14\textheight]{Esplice}
+  \includegraphics[height=0.65\textheight]{Tbox}
+  \includegraphics[height=0.12\textheight]{Esplice}
+    \includegraphics[height=0.09\textheight]{Elift}
+\end{figure}
 \end{frame}
 
-\begin{frame}
-TODO
+\begin{frame}{\calculus - patterns}
+\begin{figure}
+  \includegraphics[height=0.12\textheight]{Tpat}
+  \includegraphics[height=0.3\textheight]{Tpat-app}
+  \includegraphics[height=0.2\textheight]{Tpat-my}
+\end{figure}
+\end{frame}
+
+\subsection{Proving soundness}
+\begin{frame}{Proving soundness}
+\begin{theorem}[Progress]
+  If $\emptyset \vdash^0 t \in T$, then $t$ is a value or there exists $t'$ such $t \longrightarrow^0 t'$ 
+\end{theorem}
+
+\begin{lemma}[Level Progress]
+  For any given term $t$, we have:
+  \begin{itemize}
+    \item[(1)]  If $\Gamma^{[1]} \vdash^0 t \in T$, then $t$ is a value or  there exists $t'$ such that $t \longrightarrow^0 t'$.
+    \item[(2)] If $\Gamma^{[1]} \vdash^1 t \in T$ and $(\square t) : \square T$ is not a value,  then there exists $t'$ such that $t \longrightarrow^1 t'$.
+  \end{itemize}
+where $\Gamma^{[1]}$ means that the environment only contains level 1 variables.
+\end{lemma}
+\end{frame}
+
+\begin{frame}{Proving soundness}
+
+\begin{theorem}[Preservation]
+  If $\Gamma \vdash^i t \in T$ and $t \longrightarrow^i t'$, then $\Gamma \vdash^i t' \in T$.
+\end{theorem}
+
+\begin{lemma}[Weakening]
+  If $\Gamma^{[1]} \vdash^i t \in T, x \not\in FV(\Gamma)$, then $\Gamma, x^j : T \vdash^i t \in T$.
+\end{lemma}
+
+\begin{lemma}[Substitution]
+  If 
+  \begin{itemize}
+    \item[(1)] $\Gamma \vdash^j t_1 \in T_1$,
+    \item[(2)] $\Gamma, x^j : T_1 \vdash^i t_2 \in T_2$ and
+    \item[(3)] $j = 0$ or $t_2$ does not contain pattern matches,
+  \end{itemize}
+then $\Gamma \vdash^i t_2[x \mapsto t_1] \in T_2$.
+\end{lemma}
+
 \end{frame}
 
 
@@ -176,7 +201,7 @@ The index specifies how many binders we have to skip (in the syntax tree) to rea
 \end{frame}
 
 \begin{frame}{De Bruijn indices - free variables}
-Indices greater than the number of binders surrounding it refer to free variables which are ordered.
+Indices greater than the number of binders surrounding it represent the free variables.
 
 \begin{align*}
 {\color{olive}\tpd{f}{T_1}}; \; {\color{brown}\tpd{g}{T_2}} \vdash & {\color{blue} \lambda x}. \; {\color{purple}\lambda y}. \; {\color{olive}f} \; {\color{blue}x} \; {\color{purple}y} \\
@@ -187,8 +212,65 @@ Indices greater than the number of binders surrounding it refer to free variable
 \end{frame}
 
 \subsection{Multiple binders in one pattern}
+\begin{frame}{Beta-reduction}
+
+$(\lambda x. \, t) \; v \quad \longrightarrow \quad t[x \mapsto v]$
+
+becomes
+
+$(\lambda. \, t) \; v \quad \longrightarrow \quad t[v/]$
+
+\begin{align*}
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash ({\color{purple}\lambda}. \; {\color{purple}\#0} \; {\color{olive}\#1}) \; {\color{blue}\#1} \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash {\color{purple}({\color{purple}\#0} \; {\color{olive}\#1})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash {\color{blue}\#1} \; {\color{olive}\#0}
+\end{align*}
+\end{frame}
+
+\begin{frame}{Beta-reduction}
+
+$(\lambda. \, t) \; v \quad \longrightarrow \quad t[v/]$
+
+\begin{align*}
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash ({\color{purple}\lambda}. \, \lambda. \, {\color{purple}\#1}) \; {\color{blue}\#1} \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash {(}\lambda. \, {\#1}{)}[\#0 \mapsto {\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash \lambda. \, ( {\#1})[\#1 \mapsto {\texttt{shift }\#1}/] \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash \lambda. \, ( {\#1})[\#1 \mapsto {\#2}/] \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash \lambda. {\color{blue}\#2}
+\end{align*}
+\end{frame}
+
 \begin{frame}{Multiple binders in one pattern}
-TODO
+As an example: unpacking a tuple
+$\texttt{unpack } (v_1, v_2) \texttt{ as } (x_1, x_2) \texttt{ in } t 
+\quad \longrightarrow \quad 
+t[x_1 \mapsto v_1, x_2 \mapsto v_2]$
+\pause \\ \-\\
+\only<4>{We need to use the \texttt{shift} operation:}
+$\texttt{unpack } (v_1, v_2) \texttt{ as } (\bullet, \bullet) \texttt{ in } t \quad 
+\only<2>{\xrightarrow{} \quad ?} 
+\only<3>{\xrightarrow{?} \quad ((t)[e_2/])[e_1/]}
+\only<4>{\longrightarrow \quad ((t)[\texttt{shift }e_2/])[e_1/]}
+$ \only<3>{{\color{red} Wrong}}
+\only<3>{Why?
+\begin{align*}
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash \texttt{unpack } ({\color{blue}\#1}, {\color{olive}\#0}) \texttt{ as } ({\color{purple}\bullet}, {\color{orange}\bullet}) \texttt{ in } ({\color{purple}\#1} \; {\color{orange}\#0}) \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash {\color{purple}(}{\color{orange}({\color{purple}\#1} \; {\color{orange}\#0})}[{\color{red}\#0}/]{\color{purple})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash {\color{purple}(}{\color{purple}\#0} \; {\color{red}\#0}{\color{purple})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash ({\color{blue}\#1} \; {\color{blue}\#1})
+\end{align*}
+The {\color{red} red \#0} is now bound to the {\color{purple} purple binder}, so it could be written as $\color{purple} \#0$, but we would expect it to stay {\color{olive} \#0}.
+}
+\only<4>{
+\begin{align*}
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash \texttt{unpack } ({\color{blue}\#1}, {\color{olive}\#0}) \texttt{ as } ({\color{purple}\bullet}, {\color{orange}\bullet}) \texttt{ in } ({\color{purple}\#1} \; {\color{orange}\#0}) \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash {\color{purple}(}{\color{orange}({\color{purple}\#1} \; {\color{orange}\#0})}[{(\texttt{shift }\#0)}/]{\color{purple})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash {\color{purple}(}{\color{orange}({\color{purple}\#1} \; {\color{orange}\#0})}[{\color{olive}\#1}/]{\color{purple})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash {\color{purple}(}{\color{purple}\#0} \; {\color{olive}\#1}{\color{purple})}[{\color{blue}\#1}/] \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash ({\color{blue}\#1} \; {\color{olive}\#0})
+\end{align*}
+}
+
 \end{frame}
 \section{Challenges of the mechanization}
 \begin{frame}{Challenges of the mechanization}
@@ -197,20 +279,63 @@ TODO
   \item handling multiple binders
   \item mutually inductive types
   \begin{itemize}
-    \item custom induction principle
+    \item custom syntactic induction principle
   \end{itemize}
 \end{itemize}
 \end{frame}
 
-\begin{frame}{Useful conclusions}
+\begin{frame}[fragile]{Lessons learned}
 \begin{itemize}
   \item `unit' testing before starting proofs
+  \pause
+  \item iterative development
+  \pause
+  \item notations
+\end{itemize}
+\begin{figure}
+  \includegraphics[width=0.8\textwidth]{notation}
+\end{figure}
+
+\end{frame}
+
+\begin{frame}[fragile]{Lessons learned}
+\begin{itemize}
+  \item `unit' testing before starting proofs
+  \item iterative development
+  \item notations
+  \item proof stability
+  \begin{itemize}
+    \item predictive names
+  \end{itemize}
+\end{itemize}
+Prefer \texttt{assert ($Hypothesis$) as HypX.} \\ instead of just \texttt{assert ($Hypothesis$).}
+
+\texttt{intro Ht1typ Hreduct.} instead of \texttt{intros.} if the hypothesis names are then used somewhere explicitly.
+
+etc.
+
+
+\end{frame}
+
+\begin{frame}[fragile]{Lessons learned}
+\begin{itemize}
+  \item `unit' testing before starting proofs
+  \item iterative development
+  \item notations
   \item proof stability
   \begin{itemize}
     \item predictive names
     \item tactics using pattern matching to find right hypothesis regardless of name
   \end{itemize}
 \end{itemize}
+\begin{lstlisting}[mathescape=true, basicstyle=\small\ttfamily]
+Ltac invV :=
+  match goal with
+  | H: ?G $\vdash$(L0) ?v $\in$ $\square$(?T) |- _ => inversion H; subst
+  end.
+\end{lstlisting}
+which matches for example: \\ \texttt{H3: G $\vdash$(L0) (Quote t $:$ T1) $\in$ $\qtype{Nat}$}.
+
 \end{frame}
 
 \section{}
