@@ -17,6 +17,11 @@
 \usepackage{graphicx}
 \graphicspath{ {./images/} }
 
+\usepackage{pgfpages}
+%\setbeameroption{hide notes} % Only slides
+%\setbeameroption{show only notes} % Only notes
+\setbeameroption{show notes on second screen=right} % Both
+
 \def\e{e}
 \def\t{t}
 \def\u{u}
@@ -69,14 +74,27 @@
 \begin{document}
   \begin{frame}
   \titlepage
+  \note{
+   The project was supervised by Fengyun Liu and Nicolas Stucki. 
+  }
 \end{frame}
 \begin{frame}
   \calculus \, is an extension of \textit{simply typed lambda calculus} that adds splices, quotes and quoted pattern matching. It formalizes quoted pattern matching which is being added in Scala 3. \\~\
   
   The goal of this semester project was to create mechanized proofs of soundness of that calculus, based on the paper proofs in the original paper. The project consists of 1366 lines of Coq code, of which 585 are the proofs and 455 are definitions.
+  
 \end{frame}
 \begin{frame}{Overview}
   \tableofcontents
+  
+  \note{
+    \begin{itemize}
+    \item We will first shortly describe the calculus
+    \item then we will introduce De Bruijn indices which were one of the main challenges of the formalization and discuss an interesting example.
+    \item then we will see an overview of the soundness proofs
+    \item Finally we'll discuss some lessons that I learned along the way. 
+    \end{itemize}
+  }
 \end{frame}
 
 \section{\calculus calculus}
@@ -100,6 +118,22 @@ f = \lam{e}{\qtype{Nat}}{\patmat{e}{\big( \patapp{\patapp{add}{\patnat{0}}}{(\pa
 \begin{equation*}
 \big(\app{f \;}{\square(\app{\app{add}{0}}{2})} \big) \;\; \longrightarrow \square(2)
 \end{equation*}
+
+\note{
+  \footnotesize{
+\begin{itemize}
+  \item First to understand better the calculus we will compare it with Scala
+  \item Above we can see a simple function that takes a code value representing some computation
+  and if that computation represents adding 0 to some other value `y', we simplify it to just this second value
+  \item we achieve that by pattern matchin on the code value and matching it against an application of the add function
+  \item the code that is applied as the second argument is bound as a code value `y' that can be than further analysed or returned
+  \item In the example, we simplify code computing the addition $0 + 2$ into just the code value representing number two.
+  \item below we see the analogous program in the calculus, the idea is very similar but for the syntax
+  \item the tilde stands for match $e$ against some pattern, after the question mark is the code that is evaluated on match success and can refer to new bindings introduced in the pattern
+  \item after the double bars is the alternative that is executed if the match failed
+\end{itemize}
+}
+}
 \end{frame}
 
 \newcommand{\sep}{\,|\,}
@@ -125,6 +159,16 @@ T & ::= & Nat \sep T{\to}T \sep \qtype{T} \\
 
 \let\thefootnote\relax\footnotetext{Definitions from the paper \textit{A Theory of Quoted Code Patterns}}
 
+\note{
+  \begin{itemize}
+    \item the calculus has the standard STLC constructs like lambda abstraction, variables and application and is extended with a fixpoint operator and numbers
+    \item then we have the square which is a quote operator - it represents the code value of the term inside it
+    \item dual to it is the dollar which is a splice operator - it can be put inside a quoted term and it takes some code value and inserts into the quoted code the code that this value represents
+    \item then there's the lift operator that allows to lift an evaluated numeric value to a code value representing that number and the pattern match that was explained before
+    \item The values are numbers, lambda abstractions, and code values containing plain terms i.e. terms that don't contain any quotes, splices or pattern matches.
+  \end{itemize}
+}
+
 \end{frame}
 
 \begin{frame}{\calculus - quotes and splices}
@@ -135,54 +179,79 @@ T & ::= & Nat \sep T{\to}T \sep \qtype{T} \\
   \includegraphics[height=0.12\textheight]{Esplice}
     \includegraphics[height=0.09\textheight]{Elift}
 \end{figure}
+
+\note{
+  \footnotesize{
+  \begin{itemize}
+    \item Here we show some of the typing and evaluation rules.
+    \item The calculus has two levels: level 0 for the top level code that is actually evaluated and level 1 for the code level. The levels can be interleaved using the quote and splice operators - at level 0 we can use quote which inside has level 1 code. In level 1 code we can use a splice to refer to some level 0 code that can be evaluated and placed inside this code value replacing the splice.
+    \item The splice evaluation rule shows this - once some code that is spliced is evaluated to some plain value (i.e. it cannot be itself further reduced), it can take the splice's place in that code value.
+    \item almost all evaluation happens at level 0, as level 1 represents just code values. The only evaluation rules regarding level 1 are ones that allow to propagate evaluation into splices that are in the code value and the E-SPLICE rule that reduces the splice.
+    \item Beta reduction and evaluating pattern matching is only allowed at level 0.
+  \end{itemize}
+}
+}
+\end{frame}
+\newcommand{\syntaxeq}[2]{ #1 \quad &\equiv \quad #2 \\ }
+\begin{frame}{\calculus - un-nesting patterns}
+\footnotesize{
+\begin{align*}
+\syntaxeq
+{ \texttt{MatchNat} \; t_1 \; n \; t_2 \; t_3 }
+{ \patmat{t_1}{\patnat{n}}{t_2}{t_3} }     
+\syntaxeq
+{ \texttt{MatchVar} \; t_1 \; x \; t_2 \; t_3 }
+{ \patmat{t_1}{\patref{x}}{t_2}{t_3} }
+\syntaxeq
+{ \texttt{MatchApp} \; t_1 \; T_1 \; T_2 \; {\color{gray}b_0} \; {\color{gray}b_1} \; t_2 \; t_3 }
+{ \patmat{t_1}{\patapp{(\patbind{b_0}{T_1})}{(\patbind{b_1}{T_1 \to T_2})}}{t_2}{t_3} }     
+\syntaxeq
+{ \texttt{MatchUnlift} \; t_1 \; {\color{gray}b_0} \; t_2 \; t_3 }
+{ \patmat{t_1}{\patunlift{b_0}}{t_2}{t_3} }  
+\syntaxeq
+{ \texttt{MatchLam} \; t_1 \; (T_1 \to T_2) \; {\color{gray}b_0} \; t_2 \; t_3 }
+{ \patmat{t_1}{\patlam{b_0}{T_1 \to T_2}}{t_2}{t_3} }
+\syntaxeq
+{ \texttt{MatchFix} \; (\tpd{t_1}{T_1}) \; {\color{gray}b_0} \; t_2 \; t_3 }
+{ \patmat{(\tpd{t_1}{T_1})}{\patfix{(\patbind{b_0}{T_1 \to T_1})}}{t_2}{t_3} }
+\end{align*}
+}
+\note{
+  \begin{itemize}
+    \item One of the changes we made to the calculus to make the mechanization easier was to remove nested patterns.
+  
+    \item As a result of that we also turned matching each pattern into a separate syntactic form as can be seen here.
+  
+    \item This of course doesn't change the expressivity of the calculus as we can easily convert a nested pattern match into a series of non-nested pattern matches.
+  
+    \item There were actually two patterns that allowed for nesting - matching an application and the fixpoint. So instead of allowing an arbitrary nested pattern we only allow the patterns to be bind, i.e. all things can be nested are just bound to some variables. If necessary they can be than pattern matched again to emulate a nested pattern.
+\end{itemize}
+}
+
 \end{frame}
 
 \begin{frame}{\calculus - patterns}
+%\todo[inline]{Not sure if I should show this one?}
+
+Originally --- 1 base rule for pattern match and rules for each pattern:
 \begin{figure}
-  \includegraphics[height=0.12\textheight]{Tpat}
-  \includegraphics[height=0.3\textheight]{Tpat-app}
-  \includegraphics[height=0.2\textheight]{Tpat-my}
+  \includegraphics[width=1.05\textwidth, trim={1mm 1mm 1mm 1mm}, clip]{Tpat}
+  \includegraphics[width=0.9\textwidth]{Tunlift}
 \end{figure}
-\end{frame}
 
-\subsection{Proving soundness}
-\begin{frame}{Proving soundness}
-\begin{theorem}[Progress]
-  If $\emptyset \vdash^0 t \in T$, then $t$ is a value or there exists $t'$ such $t \longrightarrow^0 t'$ 
-\end{theorem}
-
-\begin{lemma}[Level Progress]
-  For any given term $t$, we have:
+Simplified --- separate rule for each pattern match:
+\begin{figure}
+  \includegraphics[width=1.05\textwidth, trim={1mm 1mm 1mm 1mm}, clip]{Tmyunlift}
+\end{figure}
+\note{
   \begin{itemize}
-    \item[(1)]  If $\Gamma^{[1]} \vdash^0 t \in T$, then $t$ is a value or  there exists $t'$ such that $t \longrightarrow^0 t'$.
-    \item[(2)] If $\Gamma^{[1]} \vdash^1 t \in T$ and $(\square t) : \square T$ is not a value,  then there exists $t'$ such that $t \longrightarrow^1 t'$.
+    \item the original calculus had a general typing rule for all patterns and a separate kind of typing judgement for checking the patterns that would also return the list of bindings introduced by the patterns
+    \item after the simplification, each pattern type has a separate typing rule that handles its bindings (if there are any)
+    \item similarly, every pattern type gets 3 separate evaluation rules: for success, failure and one for head reduction
+    \item as an example we show the typing rules for the general pattern match and the unlift pattern typing from the original calculus and the typing rule for the unlift pattern match in the modified version
   \end{itemize}
-where $\Gamma^{[1]}$ means that the environment only contains level 1 variables.
-\end{lemma}
+}
 \end{frame}
-
-\begin{frame}{Proving soundness}
-
-\begin{theorem}[Preservation]
-  If $\Gamma \vdash^i t \in T$ and $t \longrightarrow^i t'$, then $\Gamma \vdash^i t' \in T$.
-\end{theorem}
-
-\begin{lemma}[Weakening]
-  If $\Gamma^{[1]} \vdash^i t \in T, x \not\in FV(\Gamma)$, then $\Gamma, x^j : T \vdash^i t \in T$.
-\end{lemma}
-
-\begin{lemma}[Substitution]
-  If 
-  \begin{itemize}
-    \item[(1)] $\Gamma \vdash^j t_1 \in T_1$,
-    \item[(2)] $\Gamma, x^j : T_1 \vdash^i t_2 \in T_2$ and
-    \item[(3)] $j = 0$ or $t_2$ does not contain pattern matches,
-  \end{itemize}
-then $\Gamma \vdash^i t_2[x \mapsto t_1] \in T_2$.
-\end{lemma}
-
-\end{frame}
-
 
 \section{De Bruijn indices}
 \begin{frame}{De Bruijn indices}
@@ -198,6 +267,15 @@ The index specifies how many binders we have to skip (in the syntax tree) to rea
 {\color{blue}\lambda x}. \, {\color{olive}\lambda y}. \, {\color{blue}x} \; \Longrightarrow \; {\color{blue}\lambda}. \, {\color{olive}\lambda}. \, {\color{blue}\#1}
 \end{equation*}
 
+\note{
+In the mechanization we need to represent variable binding. The method usually used on paper - names, is not great for mechanization because we need to be very careful about alpha-equivalence. 
+
+To simplify the $\alpha$-equivalence relation and definition of substitution, instead of using normal names, we represent variables using De Bruijn indices
+
+Instead of a name we have an index that specifies how many binders we have to skip (in the syntax tree) to reach the one we are bound to.
+
+}
+
 \end{frame}
 
 \begin{frame}{De Bruijn indices - free variables}
@@ -208,6 +286,12 @@ Indices greater than the number of binders surrounding it represent the free var
 {\color{olive} T_1}; \; {\color{brown}T_2} \vdash & {\color{blue} \lambda}. \;\; {\color{purple}\lambda}. \;\; {\color{olive} \#3} \; {\color{blue}\#1} \; {\color{purple} \#0}
 \end{align*}
 
+\note{
+  \begin{itemize}
+    \item We treat variables in the environment as binders and identify them by their order, since they are not named. 
+\item The f refers to the second variable from the environment, so it has to skip the two lambdas and one variable in the environment. So it skips 3 binders in total. 
+  \end{itemize}
+}
 
 \end{frame}
 
@@ -225,6 +309,13 @@ $(\lambda. \, t) \; v \quad \longrightarrow \quad t[v/]$
 {\color{blue}T_2}; {\color{olive}T_1} &\vdash {\color{purple}({\color{purple}\#0} \; {\color{olive}\#1})}[{\color{blue}\#1}/] \\
 {\color{blue}T_2}; {\color{olive}T_1} &\vdash {\color{blue}\#1} \; {\color{olive}\#0}
 \end{align*}
+
+\note{
+  \begin{itemize}
+    \item To illustrate, in beta reduction, we no longer have a name of the substituted variable.
+    \item So our substitution operation just replaces the variables bound to the closest binder (that is index 0) and decreases all other indices by 1 (to indicate that with this substitution we have removed one external binder)
+  \end{itemize}
+}
 \end{frame}
 
 \begin{frame}{Beta-reduction}
@@ -238,9 +329,34 @@ $(\lambda. \, t) \; v \quad \longrightarrow \quad t[v/]$
 {\color{blue}T_2}; {\color{olive}T_1} &\vdash \lambda. \, ( {\#1})[\#1 \mapsto {\#2}/] \\
 {\color{blue}T_2}; {\color{olive}T_1} &\vdash \lambda. {\color{blue}\#2}
 \end{align*}
+\note{
+  \footnotesize{
+  \begin{itemize}
+    \item To illustrate further how the substitution operation traverses more complex term let's see how reducing a lambda abstraction that contains another lambda abstraction works.
+    \item First, we remove the lambda abstraction. The indices stay the same as the substitution operation can itself be counted as a binder.
+    \item At the top level we need to replace all 0-indices with the new value.
+    \item But when traversing the term, when we get inside another binder (the second lambda), we need to keep all references up to date.
+    \item The index that was 0 on the outside is now 1 inside this binder, so we note that we now replace 1-indices. Moreover, the term that is substituted will also now go inside another binder, so it has to be updated to keep referring to the same variables as before.
+    \item This is handled by the \texttt{shift} function which increases all indices inside the term by one.
+  \end{itemize}
+}
+}
+
 \end{frame}
 
 \begin{frame}{Multiple binders in one pattern}
+\note{
+  \fontsize{8}{1}{
+  \begin{itemize}
+    \item Now, I wanted to describe what I think is an interesting lesson of using De Bruijn indices in a bit more complicated settings.
+    \item The application pattern binds two variables, so when evaluating it we need to bind two variables at one. To make the example more approachable, instead let's consider a similar issue when unpacking a tuple - we need to bind both elements at once.
+    \item First, when using De Bruijn indices, we don't have the names - so we have to remove $x_1$ and $x_2$, instead we can just say that the closest binder binds the second element (as it is the closest one), and the second index binds the first tuple element.
+    \item What will be the evaluation rule? The first guess is to just replace the elements one by one. But this leads to an error - the green/olive \#0 is substituted for the orange one, but later the result is again substituted. So that \#0 is actually inside the scope of the second binder, but the substituted value was not updated. This breaks the references.
+    \item Instead, to make up for $v_2$ being inside scope of the second substitution, we need to \texttt{shift} it to keep indices up-to-date. Now we can see that when we shift the term it evaluates correctly - the \#0 becomes a \#1 inside of the binder and is later decremented back to \#0 upon the second substitution. All the time it refers to the correct variable from the environment.
+  \end{itemize}
+}
+}
+
 As an example: unpacking a tuple
 $\texttt{unpack } (v_1, v_2) \texttt{ as } (x_1, x_2) \texttt{ in } t 
 \quad \longrightarrow \quad 
@@ -249,8 +365,8 @@ t[x_1 \mapsto v_1, x_2 \mapsto v_2]$
 \only<4>{We need to use the \texttt{shift} operation:}
 $\texttt{unpack } (v_1, v_2) \texttt{ as } (\bullet, \bullet) \texttt{ in } t \quad 
 \only<2>{\xrightarrow{} \quad ?} 
-\only<3>{\xrightarrow{?} \quad ((t)[e_2/])[e_1/]}
-\only<4>{\longrightarrow \quad ((t)[\texttt{shift }e_2/])[e_1/]}
+\only<3>{\xrightarrow{?} \quad ((t)[v_2/])[v_1/]}
+\only<4>{\longrightarrow \quad ((t)[\texttt{shift }v_2/])[v_1/]}
 $ \only<3>{{\color{red} Wrong}}
 \only<3>{Why?
 \begin{align*}
@@ -272,17 +388,94 @@ The {\color{red} red \#0} is now bound to the {\color{purple} purple binder}, so
 }
 
 \end{frame}
-\section{Challenges of the mechanization}
-\begin{frame}{Challenges of the mechanization}
-\begin{itemize}
-  \item nested pattern matching
-  \item handling multiple binders
-  \item mutually inductive types
+
+
+\section{Proving soundness}
+\begin{frame}{Proving soundness}
+\begin{theorem}[Progress]
+  If $\emptyset \vdash^0 t \in T$, then $t$ is a value or there exists $t'$ such $t \longrightarrow^0 t'$ 
+\end{theorem}
+
+\begin{lemma}[Level Progress]
+  For any given term $t$, we have:
   \begin{itemize}
-    \item custom syntactic induction principle
+    \item[(1)]  If $\Gamma^{[1]} \vdash^0 t \in T$, then $t$ is a value or  there exists $t'$ such that $t \longrightarrow^0 t'$.
+    \item[(2)] If $\Gamma^{[1]} \vdash^1 t \in T$ and $(\square t) : \square T$ is not a value,  then there exists $t'$ such that $t \longrightarrow^1 t'$.
   \end{itemize}
-\end{itemize}
+  where $\Gamma^{[1]}$ means that the environment only contains level 1 variables.
+\end{lemma}
+
+\note{
+  \begin{itemize}
+    \item The progress theorem is standard, but getting there is less so.
+    \item We use a lemma that characterizes progress on both levels. The progress theorem is a directo corollary of this lemma.
+    \item At level 0 we mimic the progress theorem, but instead of an empty environment we allow the environemnt to contain level 1 variables. That is because when evaluating level 0 code nested inside of splices, as level 1 abstractions are not reduced, the variables introduced by them may be in scope.
+    \item At level 1 we say that if the term inside the code value is not plain, i.e. it contains some splices, it can be further reduced.
+    \item The two parts of the lemma depend on each other as to define reduction of splices inside level 1 code we need reduction at level 0 and vice-versa.
+  \end{itemize}
+}
 \end{frame}
+
+\begin{frame}{Proving soundness}
+
+\begin{theorem}[Preservation]
+If $\Gamma \vdash^i t \in T$ and $t \longrightarrow^i t'$, then $\Gamma \vdash^i t' \in T$.
+\end{theorem}
+
+%\begin{lemma}[Weakening]
+%If $\Gamma^{[1]} \vdash^i t \in T, x \not\in FV(\Gamma)$, then $\Gamma, x^j : T \vdash^i t \in T$.
+%\end{lemma}
+
+\begin{lemma}[Substitution]
+If 
+\begin{itemize}
+  \item[(1)] $\Gamma \vdash^j t_1 \in T_1$,
+  \item[(2)] $\Gamma, x^j : T_1 \vdash^i t_2 \in T_2$ and
+  \item[(3)] $j = 0$ or $t_2$ does not contain pattern matches,
+\end{itemize}
+then $\Gamma \vdash^i t_2[x \mapsto t_1] \in T_2$.
+\end{lemma}
+
+Why third assumption? $x^1: T \vdash \patmat{(\quoted{x})}{\patref{x}}{e_1}{e_2}$
+
+\note{
+  \footnotesize{
+\begin{itemize}
+  \item The preservation theorem is also rather standard.
+%  \item In the weakening lemma it is worth noticing that the added variable can be at different level than the term. The assumption that the variable x is not free in $\Gamma$ is stated a bit differently in the mechanization because of using De Bruijn indices but this is a rather technical detail.
+%  \item \textit{(restricting gamma to just level 1 variables seems like was not necessary for the lemma to hold)}
+%  
+  \item In the substitution lemma, the third assumption is particularly interesting. It states that we can substitute a level 1 variable only if the term that we subsitute into doesn't contain any pattern matches.
+  \item This is necessary to ensure that we don't replace a variable inside the pattern matching against a variable with something else.
+  \item This assumption is ok, because most of the substitutions are at level 0 (beta reduction or pattern matching both introduce variables at level 0).
+  \item There is only one case where we are substituting a level 1 variable that is \textit{matching a lambda} and in there we know that the term that we substitute into is plain, so it can't contain a pattern match.
+\end{itemize}
+}
+}
+
+\end{frame}
+
+\section{Lessons learned}
+%\begin{frame}{Challenges of the mechanization}
+%\begin{itemize}
+%  \item nested pattern matching
+%  \item variable binding (De Bruijn indices)
+%  \item handling multiple binders
+%  \item mutually inductive types
+%  \begin{itemize}
+%    \item custom syntactic induction principle
+%  \end{itemize}
+%\end{itemize}
+%
+%\note{
+%  \begin{itemize}
+%    \item To sum up, the main challenges of the mechanization was to define the calculus in Coq in a way that will be convenient to work with. Some approaches that are easy on paper may get very complicated in the mechanization.
+%    \item So we simplify the pattern matching by removing nesting and use De Bruijn indices.
+%    \item We had to be especially careful when handling multiple binders in the application pattern. This could be even harder if we allowed nested patterns as this could allow for an arbitrary amount of binders introduced by a single match.
+%    \item As the syntax consists of untyped terms that are ascribed with types, to use syntactic induction we had to generate a mutually recursive induction principle. Basing on that we created a custom syntactic principle that was simpler to use then the one generated by default.
+%  \end{itemize}
+%}
+%\end{frame}
 
 \begin{frame}[fragile]{Lessons learned}
 \begin{itemize}
@@ -295,17 +488,24 @@ The {\color{red} red \#0} is now bound to the {\color{purple} purple binder}, so
 \begin{figure}
   \includegraphics[width=0.8\textwidth]{notation}
 \end{figure}
-
+\note{
+  \fontsize{8}{1}{
+\begin{itemize}
+  \item now I wanted to discuss some lessons that I learned during the project
+  \item First one is that it is a good idea to write unit tests - for example use the definition of the calculus in Coq to write some simple terms in that calculus and proving that they typecheck and evaluate as expected. This allows to catch errors in the definitions that may be harder to spot deep inside a proof. Moreover, it serves as nice examples of the calculus.
+  \item We choose to develop the project iteratively. That is, I started with simply typed lambda calculus, then extended it with splices and quotes and only then I added the pattern matching (which was the hardest part) and at last the fixpoint operator.
+  \item This had a downside that I missed some requirements that the pattern matching imposed on the definitions (for example multiple binders) and had to change the library after encoding the simple types. On the other hand this approach offered more confidence that even if I wasn't able to finish the final proof, I was able to deliver something that would still be a reasonable outcome.
+  \item Using notations and an editor that supports ligatures was a rather cosmetic choice but it allowed to make the theorems look almost like the ones on paper. Making assumptions readable was very helpful when I had to look at lots of them.
+\end{itemize}
+}
+}
 \end{frame}
 
 \begin{frame}[fragile]{Lessons learned}
 \begin{itemize}
-  \item `unit' testing before starting proofs
-  \item iterative development
-  \item notations
   \item proof stability
   \begin{itemize}
-    \item predictive names
+    \item predictable names
   \end{itemize}
 \end{itemize}
 Prefer \texttt{assert ($Hypothesis$) as HypX.} \\ instead of just \texttt{assert ($Hypothesis$).}
@@ -314,17 +514,19 @@ Prefer \texttt{assert ($Hypothesis$) as HypX.} \\ instead of just \texttt{assert
 
 etc.
 
+\note{
+  \begin{itemize}
+    \item By default Coq names the hypotheses with increasing numbers. If definitions are changed, proofs using hypotheses by name tend to break, because the numbers shift. So it turned out it is good to make the names explicit wherever possible, to make the proofs more robust to irrelevant updates.
+  \end{itemize}
+}
 
 \end{frame}
 
 \begin{frame}[fragile]{Lessons learned}
 \begin{itemize}
-  \item `unit' testing before starting proofs
-  \item iterative development
-  \item notations
   \item proof stability
   \begin{itemize}
-    \item predictive names
+    \item predictable names
     \item tactics using pattern matching to find right hypothesis regardless of name
   \end{itemize}
 \end{itemize}
@@ -334,7 +536,26 @@ Ltac invV :=
   | H: ?G $\vdash$(L0) ?v $\in$ $\square$(?T) |- _ => inversion H; subst
   end.
 \end{lstlisting}
-which matches for example: \\ \texttt{H3: G $\vdash$(L0) (Quote t $:$ T1) $\in$ $\qtype{Nat}$}.
+\footnotesize{
+  which matches for example: \texttt{H3: G $\vdash$(L0) (Quote t $:$ T1) $\in$ $\qtype{Nat}$}.
+  
+  We can then replace
+\begin{lstlisting}
+destruct typing_judgement.
+- inversion H2.
+- inversion H4.
+... (* many more branches *)
+\end{lstlisting}
+by just \texttt{destruct typing\_judgement; invV.}
+}
+
+\note{
+  \begin{itemize}
+    \item In practice, we couldn't always make the names stable. For example when calling inversion on the typing judgement which had more than 10 possible cases it is unreasonable to name them all by hand.
+    \item But we often needed to find some particular hypothesis, like the one shown here stating that some term types to some code value type.
+    \item In this scenario writing tactics that find the right hypothesis by pattern matching was extremely useful. It often allowed to shrink a case-by-case proof that differed only by the name of the hypothesis to a proof that just called this tactic on each branch.
+  \end{itemize}
+}
 
 \end{frame}
 
