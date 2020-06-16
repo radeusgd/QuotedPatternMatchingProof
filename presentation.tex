@@ -18,9 +18,9 @@
 \graphicspath{ {./images/} }
 
 \usepackage{pgfpages}
-%\setbeameroption{hide notes} % Only slides
+\setbeameroption{hide notes} % Only slides
 %\setbeameroption{show only notes} % Only notes
-\setbeameroption{show notes on second screen=right} % Both
+%\setbeameroption{show notes on second screen=right} % Both
 
 \def\e{e}
 \def\t{t}
@@ -391,10 +391,19 @@ The {\color{red} red \#0} is now bound to the {\color{purple} purple binder}, so
 
 
 \section{Proving soundness}
-\begin{frame}{Proving soundness}
+\begin{frame}{Proving soundness - progress}
 \begin{theorem}[Progress]
   If $\emptyset \vdash^0 t \in T$, then $t$ is a value or there exists $t'$ such $t \longrightarrow^0 t'$ 
 \end{theorem}
+
+\note{
+  \begin{itemize}
+    \item The progress theorem is standard, but getting there is less so.
+    \item We use a lemma that characterizes progress on both levels. The progress theorem is a directo corollary of this lemma.
+  \end{itemize}
+}
+\end{frame}
+\begin{frame}{Proving soundness - progress}
 
 \begin{lemma}[Level Progress]
   For any given term $t$, we have:
@@ -416,11 +425,19 @@ The {\color{red} red \#0} is now bound to the {\color{purple} purple binder}, so
 }
 \end{frame}
 
-\begin{frame}{Proving soundness}
+\begin{frame}{Proving soundness - preservation}
 
 \begin{theorem}[Preservation]
 If $\Gamma \vdash^i t \in T$ and $t \longrightarrow^i t'$, then $\Gamma \vdash^i t' \in T$.
 \end{theorem}
+\note{
+    \begin{itemize}
+      \item The preservation theorem is also rather standard.
+      \item The substitution lemma that is used in it is however a bit more interesting.
+    \end{itemize}
+}
+\end{frame}
+\begin{frame}{Proving soundness - preservation}
 
 %\begin{lemma}[Weakening]
 %If $\Gamma^{[1]} \vdash^i t \in T, x \not\in FV(\Gamma)$, then $\Gamma, x^j : T \vdash^i t \in T$.
@@ -436,12 +453,11 @@ If
 then $\Gamma \vdash^i t_2[x \mapsto t_1] \in T_2$.
 \end{lemma}
 
-Why third assumption? $x^1: T \vdash \patmat{(\quoted{x})}{\patref{x}}{e_1}{e_2}$
+Why the third assumption? $x^1: T \vdash \patmat{(\quoted{x})}{\patref{x}}{e_1}{e_2}$
 
 \note{
   \footnotesize{
 \begin{itemize}
-  \item The preservation theorem is also rather standard.
 %  \item In the weakening lemma it is worth noticing that the added variable can be at different level than the term. The assumption that the variable x is not free in $\Gamma$ is stated a bit differently in the mechanization because of using De Bruijn indices but this is a rather technical detail.
 %  \item \textit{(restricting gamma to just level 1 variables seems like was not necessary for the lemma to hold)}
 %  
