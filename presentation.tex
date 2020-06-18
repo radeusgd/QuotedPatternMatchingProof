@@ -18,9 +18,9 @@
 \graphicspath{ {./images/} }
 
 \usepackage{pgfpages}
-\setbeameroption{hide notes} % Only slides
+%\setbeameroption{hide notes} % Only slides
 %\setbeameroption{show only notes} % Only notes
-%\setbeameroption{show notes on second screen=right} % Both
+\setbeameroption{show notes on second screen=right} % Both
 
 \def\e{e}
 \def\t{t}
@@ -93,6 +93,7 @@
     \item then we will introduce De Bruijn indices which were one of the main challenges of the formalization and discuss an interesting example.
     \item then we will see an overview of the soundness proofs
     \item Finally we'll discuss some lessons that I learned along the way. 
+    \item 3:00
     \end{itemize}
   }
 \end{frame}
@@ -130,7 +131,7 @@ f = \lam{e}{\qtype{Nat}}{\patmat{e}{\big( \patapp{\patapp{add}{\patnat{0}}}{(\pa
   \item In the example, we simplify code computing the addition $0 + 2$ into just the code value representing number two.
   \item below we see the analogous program in the calculus, the idea is very similar but for the syntax
   \item the tilde stands for match $e$ against some pattern, after the question mark is the code that is evaluated on match success and can refer to new bindings introduced in the pattern
-  \item after the double bars is the alternative that is executed if the match failed
+  \item after the double bars is the alternative that is executed if the match failed (4:30)
 \end{itemize}
 }
 }
@@ -164,22 +165,22 @@ T & ::= & Nat \sep T{\to}T \sep \qtype{T} \\
     \item the calculus has the standard STLC constructs like lambda abstraction, variables and application and is extended with a fixpoint operator and numbers
     \item then we have the square which is a quote operator - it represents the code value of the term inside it
     \item dual to it is the dollar which is a splice operator - it can be put inside a quoted term and it takes some code value and inserts into the quoted code the code that this value represents
-    \item then there's the lift operator that allows to lift an evaluated numeric value to a code value representing that number and the pattern match that was explained before
-    \item The values are numbers, lambda abstractions, and code values containing plain terms i.e. terms that don't contain any quotes, splices or pattern matches.
+    \item {\color{gray}then there's the lift operator that allows to lift an evaluated numeric value to a code value representing that number and the pattern match that was explained before}
+    \item The values are numbers, lambda abstractions, and code values containing plain terms i.e. terms that don't contain any quotes, splices or pattern matches. (6:00)
   \end{itemize}
 }
 
 \end{frame}
 
 \begin{frame}{\calculus - quotes and splices}
+$\app{(\lam{e}{\qtype{Nat}}{\quoted{(2 + \splice{e})}})}{\quoted{3}} \longrightarrow \quoted{(2 + \splice{\quoted{3}})} \longrightarrow \quoted{(2 + 3)}$
 \begin{figure}
 %  \includegraphics[height=0.72\textheight]{Tbox}
 %  \includegraphics[height=0.14\textheight]{Esplice}
-  \includegraphics[height=0.65\textheight]{Tbox}
+  \includegraphics[height=0.60\textheight, trim={1mm 1mm 1mm 20mm}, clip]{Tbox}
   \includegraphics[height=0.12\textheight]{Esplice}
     \includegraphics[height=0.09\textheight]{Elift}
 \end{figure}
-
 \note{
   \footnotesize{
   \begin{itemize}
@@ -187,7 +188,7 @@ T & ::= & Nat \sep T{\to}T \sep \qtype{T} \\
     \item The calculus has two levels: level 0 for the top level code that is actually evaluated and level 1 for the code level. The levels can be interleaved using the quote and splice operators - at level 0 we can use quote which inside has level 1 code. In level 1 code we can use a splice to refer to some level 0 code that can be evaluated and placed inside this code value replacing the splice.
     \item The splice evaluation rule shows this - once some code that is spliced is evaluated to some plain value (i.e. it cannot be itself further reduced), it can take the splice's place in that code value.
     \item almost all evaluation happens at level 0, as level 1 represents just code values. The only evaluation rules regarding level 1 are ones that allow to propagate evaluation into splices that are in the code value and the E-SPLICE rule that reduces the splice.
-    \item Beta reduction and evaluating pattern matching is only allowed at level 0.
+    \item Beta reduction and evaluating pattern matching is only allowed at level 0. (8:30)
   \end{itemize}
 }
 }
@@ -224,7 +225,8 @@ T & ::= & Nat \sep T{\to}T \sep \qtype{T} \\
   
     \item This of course doesn't change the expressivity of the calculus as we can easily convert a nested pattern match into a series of non-nested pattern matches.
   
-    \item There were actually two patterns that allowed for nesting - matching an application and the fixpoint. So instead of allowing an arbitrary nested pattern we only allow the patterns to be bind, i.e. all things can be nested are just bound to some variables. If necessary they can be than pattern matched again to emulate a nested pattern.
+    \item {\color{gray}There were actually two patterns that allowed for nesting - matching an application and the fixpoint. So instead of allowing an arbitrary nested pattern we only allow the patterns to be bind, i.e. all things can be nested are just bound to some variables. If necessary they can be than pattern matched again to emulate a nested pattern.}
+    \item 9:30
 \end{itemize}
 }
 
@@ -245,10 +247,12 @@ Simplified --- separate rule for each pattern match:
 \end{figure}
 \note{
   \begin{itemize}
-    \item the original calculus had a general typing rule for all patterns and a separate kind of typing judgement for checking the patterns that would also return the list of bindings introduced by the patterns
-    \item after the simplification, each pattern type has a separate typing rule that handles its bindings (if there are any)
+    %\item the original calculus had a general typing rule for all patterns and a separate kind of typing judgement for checking the patterns that would also return the list of bindings introduced by the patterns
+    \item after the simplification, each pattern type has a separate typing rule, so instead of handling an arbitrary number of bindings like in T-PAT, we statically know what bindings are introduced. This greatly simplifies mechanization.
     \item similarly, every pattern type gets 3 separate evaluation rules: for success, failure and one for head reduction
-    \item as an example we show the typing rules for the general pattern match and the unlift pattern typing from the original calculus and the typing rule for the unlift pattern match in the modified version
+    %\item as an example we show the typing rules for the general pattern match and the unlift pattern typing from the original calculus and the typing rule for the unlift pattern match in the modified version
+    
+    \item 10:30
   \end{itemize}
 }
 \end{frame}
@@ -268,18 +272,20 @@ The index specifies how many binders we have to skip (in the syntax tree) to rea
 \end{equation*}
 
 \note{
-In the mechanization we need to represent variable binding. The method usually used on paper - names, is not great for mechanization because we need to be very careful about alpha-equivalence. 
-
-To simplify the $\alpha$-equivalence relation and definition of substitution, instead of using normal names, we represent variables using De Bruijn indices
-
-Instead of a name we have an index that specifies how many binders we have to skip (in the syntax tree) to reach the one we are bound to.
-
+  \begin{itemize}
+    \item In the mechanization we need to represent variable binding. The method usually used on paper - names, is not great for mechanization because we need to be very careful about alpha-equivalence.
+    \item To simplify the $\alpha$-equivalence relation and definition of substitution, we represent variables using De Bruijn indices
+    \item Instead of a name we have an index that specifies how many binders we have to skip (in the syntax tree) to reach the one we are bound to.
+    \item Thus alpha equivalence becomes syntactic equivalence and it is easier to define capture avoiding substitution.
+    
+    \item 13:00
+  \end{itemize}
 }
 
 \end{frame}
 
 \begin{frame}{De Bruijn indices - free variables}
-Indices greater than the number of binders surrounding it represent the free variables.
+Variables in the environment are differentiated by their order.
 
 \begin{align*}
 {\color{olive}\tpd{f}{T_1}}; \; {\color{brown}\tpd{g}{T_2}} \vdash & {\color{blue} \lambda x}. \; {\color{purple}\lambda y}. \; {\color{olive}f} \; {\color{blue}x} \; {\color{purple}y} \\
@@ -289,7 +295,7 @@ Indices greater than the number of binders surrounding it represent the free var
 \note{
   \begin{itemize}
     \item We treat variables in the environment as binders and identify them by their order, since they are not named. 
-\item The f refers to the second variable from the environment, so it has to skip the two lambdas and one variable in the environment. So it skips 3 binders in total. 
+\item The $f$ that refers to $T_1$ has to skip two normal binders and one environment variable so in total it gets index 3.
   \end{itemize}
 }
 
@@ -325,19 +331,24 @@ $(\lambda. \, t) \; v \quad \longrightarrow \quad t[v/]$
 \begin{align*}
 {\color{blue}T_2}; {\color{olive}T_1} &\vdash ({\color{purple}\lambda}. \, \lambda. \, {\color{purple}\#1}) \; {\color{blue}\#1} \\
 {\color{blue}T_2}; {\color{olive}T_1} &\vdash {(}\lambda. \, {\#1}{)}[\#0 \mapsto {\color{blue}\#1}/] \\
-{\color{blue}T_2}; {\color{olive}T_1} &\vdash \lambda. \, ( {\#1})[\#1 \mapsto {\texttt{shift }\#1}/] \\
-{\color{blue}T_2}; {\color{olive}T_1} &\vdash \lambda. \, ( {\#1})[\#1 \mapsto {\#2}/] \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash \lambda. \, \big(( {\#1})[\#1 \mapsto {\texttt{shift }\#1}/]\big) \\
+{\color{blue}T_2}; {\color{olive}T_1} &\vdash \lambda. \, \big(( {\#1})[\#1 \mapsto {\#2}/]\big) \\
 {\color{blue}T_2}; {\color{olive}T_1} &\vdash \lambda. {\color{blue}\#2}
 \end{align*}
 \note{
   \footnotesize{
   \begin{itemize}
-    \item To illustrate further how the substitution operation traverses more complex term let's see how reducing a lambda abstraction that contains another lambda abstraction works.
-    \item First, we remove the lambda abstraction. The indices stay the same as the substitution operation can itself be counted as a binder.
-    \item At the top level we need to replace all 0-indices with the new value.
-    \item But when traversing the term, when we get inside another binder (the second lambda), we need to keep all references up to date.
-    \item The index that was 0 on the outside is now 1 inside this binder, so we note that we now replace 1-indices. Moreover, the term that is substituted will also now go inside another binder, so it has to be updated to keep referring to the same variables as before.
-    \item This is handled by the \texttt{shift} function which increases all indices inside the term by one.
+    %\item To illustrate further how the substitution operation traverses more complex term let's see how reducing a lambda abstraction that contains another lambda abstraction works.
+%    \item First, we remove the lambda abstraction. The indices stay the same as the substitution operation can itself be counted as a binder.
+%    \item At the top level we need to replace all 0-indices with the new value.
+%    \item But when traversing the term, when we get inside another binder (the second lambda), we need to keep all references up to date.
+%    \item The index that was 0 on the outside is now 1 inside this binder, so we note that we now replace 1-indices. Moreover, the term that is substituted will also now go inside another binder, so it has to be updated to keep referring to the same variables as before.
+%    \item This is handled by the \texttt{shift} function which increases all indices inside the term by one.
+  \item When substituting into more complex terms, we need to keep the indices referring to the original binders.
+  \item The \texttt{shift} function increases all indices in a term.
+  \item It is used when we are substituting a term and enter a binder that we need to skip to keep the references up-to-date.
+  
+      \item 15:00
   \end{itemize}
 }
 }
@@ -346,22 +357,26 @@ $(\lambda. \, t) \; v \quad \longrightarrow \quad t[v/]$
 
 \begin{frame}{Multiple binders in one pattern}
 \note{
-  \fontsize{8}{1}{
   \begin{itemize}
-    \item Now, I wanted to describe what I think is an interesting lesson of using De Bruijn indices in a bit more complicated settings.
-    \item The application pattern binds two variables, so when evaluating it we need to bind two variables at one. To make the example more approachable, instead let's consider a similar issue when unpacking a tuple - we need to bind both elements at once.
-    \item First, when using De Bruijn indices, we don't have the names - so we have to remove $x_1$ and $x_2$, instead we can just say that the closest binder binds the second element (as it is the closest one), and the second index binds the first tuple element.
+    \only<1>{\item Now, I wanted to describe what I think is an interesting lesson of using De Bruijn indices in a bit more complicated settings.
+    \item The application pattern binds two variables, so when evaluating it we need to bind two variables at one. To make the example more approachable, instead let's consider a similar issue when unpacking a tuple - we need to bind both elements at once.}
+    \only<2>{
+    \item First, when using De Bruijn indices, we don't have the names - so we have to remove $x_1$ and $x_2$, instead we can just say that the closest binder binds the second element (as it is the closest one), and the second index binds the first tuple element.}
+  \only<3>{
     \item What will be the evaluation rule? The first guess is to just replace the elements one by one. But this leads to an error - the green/olive \#0 is substituted for the orange one, but later the result is again substituted. So that \#0 is actually inside the scope of the second binder, but the substituted value was not updated. This breaks the references.
+  }
+  \only<3>{
     \item Instead, to make up for $v_2$ being inside scope of the second substitution, we need to \texttt{shift} it to keep indices up-to-date. Now we can see that when we shift the term it evaluates correctly - the \#0 becomes a \#1 inside of the binder and is later decremented back to \#0 upon the second substitution. All the time it refers to the correct variable from the environment.
+    \item 19:00
+  }
   \end{itemize}
-}
 }
 
 As an example: unpacking a tuple
 $\texttt{unpack } (v_1, v_2) \texttt{ as } (x_1, x_2) \texttt{ in } t 
 \quad \longrightarrow \quad 
 t[x_1 \mapsto v_1, x_2 \mapsto v_2]$
-\pause \\ \-\\
+
 \only<4>{We need to use the \texttt{shift} operation:}
 $\texttt{unpack } (v_1, v_2) \texttt{ as } (\bullet, \bullet) \texttt{ in } t \quad 
 \only<2>{\xrightarrow{} \quad ?} 
@@ -465,6 +480,8 @@ Why the third assumption? $x^1: T \vdash \patmat{(\quoted{x})}{\patref{x}}{e_1}{
   \item This is necessary to ensure that we don't replace a variable inside the pattern matching against a variable with something else.
   \item This assumption is ok, because most of the substitutions are at level 0 (beta reduction or pattern matching both introduce variables at level 0).
   \item There is only one case where we are substituting a level 1 variable that is \textit{matching a lambda} and in there we know that the term that we substitute into is plain, so it can't contain a pattern match.
+  
+  \item 23:00
 \end{itemize}
 }
 }
@@ -509,8 +526,10 @@ Why the third assumption? $x^1: T \vdash \patmat{(\quoted{x})}{\patref{x}}{e_1}{
 \begin{itemize}
   \item now I wanted to discuss some lessons that I learned during the project
   \item First one is that it is a good idea to write unit tests - for example use the definition of the calculus in Coq to write some simple terms in that calculus and proving that they typecheck and evaluate as expected. This allows to catch errors in the definitions that may be harder to spot deep inside a proof. Moreover, it serves as nice examples of the calculus.
+
   \item We choose to develop the project iteratively. That is, I started with simply typed lambda calculus, then extended it with splices and quotes and only then I added the pattern matching (which was the hardest part) and at last the fixpoint operator.
   \item This had a downside that I missed some requirements that the pattern matching imposed on the definitions (for example multiple binders) and had to change the library after encoding the simple types. On the other hand this approach offered more confidence that even if I wasn't able to finish the final proof, I was able to deliver something that would still be a reasonable outcome.
+
   \item Using notations and an editor that supports ligatures was a rather cosmetic choice but it allowed to make the theorems look almost like the ones on paper. Making assumptions readable was very helpful when I had to look at lots of them.
 \end{itemize}
 }

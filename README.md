@@ -12,3 +12,4 @@ It uses Coq version 8.9.1 and [DbLib](https://github.com/coq-community/dblib/) l
 
 The report of the semester project is available at [`report.pdf`](report.pdf).
 The [`examples/`](examples/) directory contains some examples from the report.
+
