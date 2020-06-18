@@ -13,3 +13,4 @@ It uses Coq version 8.9.1 and [DbLib](https://github.com/coq-community/dblib/) l
 The report of the semester project is available at [`report.pdf`](report.pdf).
 The [`examples/`](examples/) directory contains some examples from the report.
 
+The semester project was presented at 18.06.2020. Slides with notes from the presentation are available in [`presentation_notes.pdf`](presentation_notes.pdf).
