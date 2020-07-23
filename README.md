@@ -14,3 +14,4 @@ The report of the semester project is available at [`report.pdf`](report.pdf).
 The [`examples/`](examples/) directory contains some examples from the report.
 
 The semester project was presented at 18.06.2020. Slides with notes from the presentation are available in [`presentation_notes.pdf`](presentation_notes.pdf).
+test
